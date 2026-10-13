@@ -103,7 +103,7 @@
       const fs = Math.max(4, (op.fontSize || 12) * viewport.scale);
       ctx.fillStyle = op.color || "#20243a";
       ctx.font = fs + "px Arial, sans-serif"; ctx.textBaseline = "alphabetic";
-      String(op.text || "").split("\n").forEach((line, i) => ctx.fillText(line, p.x, p.y - fs * .12 + i * fs * 1.2));
+      String(op.text || "").split("\n").forEach((line, i) => ctx.fillText(line, p.x, p.y + fs * .8 + i * fs * 1.2));
     } else if (op.type === "cover" || op.type === "highlight" || op.type === "image") {
       const r = pdfRectToScreen(op);
       if (op.type === "cover") {
