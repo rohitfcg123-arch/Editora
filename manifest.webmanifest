@@ -1,0 +1,14 @@
+{
+  "name": "Editora PDF Editor",
+  "short_name": "Editora",
+  "description": "A local-first PDF editor for adding text, drawing, signatures and organizing pages.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f7fb",
+  "theme_color": "#111827",
+  "icons": [
+    { "src": "./assets/editora-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
