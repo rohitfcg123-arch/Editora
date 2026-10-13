@@ -364,7 +364,44 @@
     }catch(error){console.error(error);toast("Merge failed. One PDF may be damaged or password-protected.");}
     finally{setBusy(false);mergeInput.value="";}
   }
-  function addText(screen) {
+  async function addText(screen) {
+    // When Text is selected, detect existing PDF text under the tap.
+    // Existing text is visually covered and replaced; blank input removes it visually.
+    let hit = null;
+    try {
+      const page = await pdfDocument.getPage(currentPage);
+      const content = await page.getTextContent();
+      let best = Infinity;
+      for (const item of content.items || []) {
+        if (!item.str || !item.str.trim() || !item.transform) continue;
+        const tx = item.transform[4], ty = item.transform[5];
+        const a = viewport.convertToViewportPoint(tx, ty);
+        const h = Math.max(8, Math.abs(item.height || item.transform[3] || 10) * viewport.scale);
+        const w = Math.max(8, (item.width || item.str.length * 5) * viewport.scale);
+        const rect = {x:a[0], y:a[1]-h, w, h:h*1.35};
+        if (screen.x >= rect.x-5 && screen.x <= rect.x+rect.w+5 &&
+            screen.y >= rect.y-5 && screen.y <= rect.y+rect.h+5) {
+          const distance = Math.hypot(screen.x-(rect.x+rect.w/2), screen.y-(rect.y+rect.h/2));
+          if (distance < best) { best=distance; hit={item,rect}; }
+        }
+      }
+    } catch (error) { console.warn("Could not detect text at tap point", error); }
+    if (hit) {
+      const original = hit.item.str;
+      const replacement = prompt("Edit selected text. Leave empty to cover/remove it:", original);
+      if (replacement === null) return;
+      historyPoint();
+      const rect = screenRectToPdf(hit.rect.x, hit.rect.y, hit.rect.w, hit.rect.h);
+      pageEdits().push({type:"cover", ...rect});
+      if (replacement.length) {
+        const p = pointToPdf({x:hit.rect.x, y:hit.rect.y+Math.min(hit.rect.h*.85, hit.rect.h-2)});
+        const fontSize = Math.max(7, Math.min(36, (hit.item.height || 10)));
+        pageEdits().push({type:"text",x:p.x,y:p.y,text:replacement,fontSize,color:"#20243a"});
+      }
+      redraw();refreshPageInfo();scheduleAutosave();
+      toast(replacement.length ? "Text visually replaced. Download to apply." : "Text visually covered. Download to apply.");
+      return;
+    }
     const text=prompt("Enter the text to add:");if(text===null||text==="")return;
     const size=Number(prompt("Text size in PDF points (8–36):","12"));if(!Number.isFinite(size)&&size!==0)return;
     const p=pointToPdf(screen);historyPoint();
