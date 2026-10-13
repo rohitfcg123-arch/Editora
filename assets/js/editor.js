@@ -207,11 +207,13 @@
     (edits[currentPage] || []).forEach(op => drawOp(noteCtx, op));
     if (!temp) return;
     if (temp.type === "draw" || temp.type === "signature") drawStroke(noteCtx, temp.points, temp.color, temp.width);
-    if ((temp.type === "highlight" || temp.type === "replace" || temp.type === "edittext" || temp.type === "erase") && temp.points.length > 1) {
+    if (temp.type === "erase" && temp.points.length > 1) {
+      drawStroke(noteCtx, temp.points, "rgba(220,60,80,.75)", 18);
+    } else if ((temp.type === "highlight" || temp.type === "replace" || temp.type === "edittext") && temp.points.length > 1) {
       const a=temp.points[0], b=temp.points[temp.points.length-1];
       const x=Math.min(a.x,b.x),y=Math.min(a.y,b.y),w=Math.abs(b.x-a.x),h=Math.abs(b.y-a.y);
-      noteCtx.save(); noteCtx.fillStyle=temp.type==="highlight"?"rgba(255,230,107,.34)":temp.type==="erase"?"rgba(220,60,80,.12)":"rgba(97,87,232,.13)";
-      noteCtx.strokeStyle=temp.type==="highlight"?"#d8bd34":temp.type==="erase"?"#d83c50":"#756cf0"; noteCtx.setLineDash([5,4]);
+      noteCtx.save(); noteCtx.fillStyle=temp.type==="highlight"?"rgba(255,230,107,.34)":"rgba(97,87,232,.13)";
+      noteCtx.strokeStyle=temp.type==="highlight"?"#d8bd34":"#756cf0"; noteCtx.setLineDash([5,4]);
       noteCtx.fillRect(x,y,w,h); noteCtx.strokeRect(x,y,w,h); noteCtx.restore();
     }
   }
@@ -450,16 +452,35 @@
       redraw();refreshPageInfo();scheduleAutosave();toast(done.type==="signature"?"Signature stroke added.":"Drawing added.");return;
     }
     if(done.points.length<2){redraw();return;}
+    if(done.type==="erase") {
+      const path = done.points;
+      const radius = 14;
+      const nearPath = p => path.some(q => Math.hypot(p.x-q.x,p.y-q.y) <= radius);
+      const before = pageEdits().length;
+      const kept = pageEdits().filter(op => {
+        if (op.type === "path") return !(op.points || []).some(pt => nearPath(pdfToScreen(pt)));
+        if (op.type === "text") return !nearPath(pdfToScreen({x:op.x,y:op.y}));
+        if (["highlight","cover","image"].includes(op.type)) {
+          const r = pdfRectToScreen(op);
+          return !path.some(p => p.x >= r.x-radius && p.x <= r.x+r.w+radius && p.y >= r.y-radius && p.y <= r.y+r.h+radius);
+        }
+        return true;
+      });
+      const removedCount = before - kept.length;
+      if (removedCount > 0) {
+        historyPoint(); edits[currentPage] = kept;
+        redraw();refreshPageInfo();scheduleAutosave();
+        toast("Removed " + removedCount + " added annotation(s). Original PDF content was left unchanged.");
+      } else {
+        redraw();toast("No added annotation found under the eraser. Original PDF content is preserved.");
+      }
+      return;
+    }
     const a=done.points[0],b=done.points[done.points.length-1],x=Math.min(a.x,b.x),y=Math.min(a.y,b.y),w=Math.abs(b.x-a.x),h=Math.abs(b.y-a.y);
     if(w<3||h<3){redraw();return;}
     const rect=screenRectToPdf(x,y,w,h);
     if(done.type==="highlight") {
       historyPoint();pageEdits().push({type:"highlight",...rect,color:"#ffe66b"});redraw();refreshPageInfo();scheduleAutosave();toast("Highlight added.");
-    } else if(done.type==="erase") {
-      historyPoint();
-      pageEdits().push({type:"cover",...rect});
-      redraw();refreshPageInfo();scheduleAutosave();
-      toast("Area visually erased with a white cover. Original PDF content is not securely removed.");
     } else if(done.type==="replace" || done.type==="edittext") {
       const text=prompt("Enter replacement text. The selected area will be visually covered.");if(text===null){redraw();return;}
       const size=Number(prompt("Replacement text size (8–24):","11"))||11,p=pointToPdf({x:x+3,y:y+3});
