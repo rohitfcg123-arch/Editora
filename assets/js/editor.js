@@ -306,6 +306,7 @@
       currentPage=1;zoom=1;removed=new Set();rotations={};edits={};undoStack=[];redoStack=[];
       $("welcome").classList.add("hidden");$("editorView").classList.remove("hidden");
       $("documentName").textContent=sourceName;$("documentMeta").textContent=sizeLabel(bytes.byteLength)+" · PDF document";
+      $("closePdfButton").disabled=false;
       $("sideFileName").textContent=sourceName;$("sideFileSize").textContent=sizeLabel(bytes.byteLength);
       refreshPageInfo();await renderPage();scheduleAutosave();toast("PDF opened. Choose a tool to start editing.");
     } catch(error) {console.error(error);toast("Could not open this PDF. It may be damaged or password-protected.");}
@@ -523,6 +524,22 @@
     const pages=visiblePages(),index=pages.indexOf(currentPage),next=pages[index+delta];
     if(next){currentPage=next;renderPage();}
   }
+  $("closePdfButton").addEventListener("click", async () => {
+    if (!sourceBytes) return;
+    const ok = confirm("Remove this PDF from the editor? Unsaved edits will be discarded. Download first if you need to keep them.");
+    if (!ok) return;
+    clearTimeout(autosaveTimer);
+    try { await localDbAction("readwrite", store => store.delete("current")); } catch (error) { console.warn("Could not clear local workspace", error); }
+    pdfDocument = null; sourceBytes = null; sourceName = ""; currentPage = 1; zoom = 1;
+    removed = new Set(); rotations = {}; edits = {}; undoStack = []; redoStack = [];
+    $("editorView").classList.add("hidden"); $("welcome").classList.remove("hidden");
+    $("documentName").textContent = "No document open"; $("documentMeta").textContent = "Open a PDF to start editing";
+    $("sideFileName").textContent = "No file loaded"; $("sideFileSize").textContent = "—";
+    $("closePdfButton").disabled = true; $("downloadButton").disabled = true;
+    $("zoomInButton").disabled = true; $("zoomOutButton").disabled = true;
+    refreshPageInfo(); status("PDF removed · Open another PDF to continue");
+    toast("PDF removed from the editor. Your original file on the device is unchanged.");
+  });
   $("openButton").addEventListener("click",()=>fileInput.click());
   $("welcomeOpenButton").addEventListener("click",()=>fileInput.click());
   $("sideOpenButton").addEventListener("click",()=>fileInput.click());
