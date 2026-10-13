@@ -9,6 +9,84 @@
   let currentPage = 1, zoom = 1, viewport = null, activeTool = "select";
   let removed = new Set(), rotations = {}, edits = {}, undoStack = [], redoStack = [];
   let gesture = null, imagePoint = null, busy = false, installPrompt = null, toastTimer = null;
+
+  // Persist the current document and edits locally so a refresh does not lose work.
+  const LOCAL_DB = "editora-local-workspace";
+  const LOCAL_STORE = "workspace";
+  let autosaveTimer = null;
+  function openLocalDb() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(LOCAL_DB, 1);
+      request.onupgradeneeded = () => {
+        if (!request.result.objectStoreNames.contains(LOCAL_STORE)) request.result.createObjectStore(LOCAL_STORE);
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+  async function localDbAction(mode, action) {
+    const db = await openLocalDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(LOCAL_STORE, mode);
+      const store = tx.objectStore(LOCAL_STORE);
+      let req;
+      try { req = action(store); } catch (error) { db.close(); reject(error); return; }
+      tx.oncomplete = () => { db.close(); resolve(req ? req.result : undefined); };
+      tx.onerror = () => { db.close(); reject(tx.error || (req && req.error)); };
+      tx.onabort = () => { db.close(); reject(tx.error || new Error("Local save aborted")); };
+    });
+  }
+  function scheduleAutosave() {
+    if (!sourceBytes) return;
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(async () => {
+      try {
+        await localDbAction("readwrite", store => store.put({
+          bytes: sourceBytes,
+          name: sourceName,
+          currentPage,
+          zoom,
+          removed: Array.from(removed),
+          rotations,
+          edits,
+          savedAt: Date.now()
+        }, "current"));
+        $("statusText").textContent = "Saved locally · refresh-safe";
+      } catch (error) {
+        console.warn("Editora local autosave failed", error);
+        toast("Could not autosave locally. Download your PDF to keep a copy.", 5000);
+      }
+    }, 450);
+  }
+  async function restoreLocalWorkspace() {
+    try {
+      const saved = await localDbAction("readonly", store => store.get("current"));
+      if (!saved || !saved.bytes) return;
+      const bytes = saved.bytes instanceof Uint8Array ? saved.bytes : new Uint8Array(saved.bytes);
+      const parsed = await pdfjsLib.getDocument({data: bytes.slice()}).promise;
+      pdfDocument = parsed;
+      sourceBytes = bytes;
+      sourceName = saved.name || "document.pdf";
+      currentPage = Math.max(1, Math.min(parsed.numPages, Number(saved.currentPage) || 1));
+      zoom = Math.max(.5, Math.min(2.6, Number(saved.zoom) || 1));
+      removed = new Set(saved.removed || []);
+      rotations = saved.rotations || {};
+      edits = saved.edits || {};
+      undoStack = []; redoStack = [];
+      $("welcome").classList.add("hidden");
+      $("editorView").classList.remove("hidden");
+      $("documentName").textContent = sourceName;
+      $("documentMeta").textContent = sizeLabel(bytes.byteLength) + " · restored local document";
+      $("sideFileName").textContent = sourceName;
+      $("sideFileSize").textContent = sizeLabel(bytes.byteLength);
+      refreshPageInfo();
+      await renderPage();
+      toast("Your previous PDF and edits were restored from this device.");
+    } catch (error) {
+      console.warn("Editora local restore failed", error);
+      toast("Could not restore the previous PDF. Open it again from your device.", 5000);
+    }
+  }
   const hints = {
     select: "Navigate the page. Choose a tool to edit.",
     text: "Tap or click where the text should start.",
@@ -164,12 +242,12 @@
   function undo() {
     if (!undoStack.length) return;
     redoStack.push(JSON.stringify(edits)); edits=JSON.parse(undoStack.pop());
-    redraw(); refreshPageInfo(); toast("Last edit undone.");
+    redraw(); refreshPageInfo(); scheduleAutosave(); toast("Last edit undone.");
   }
   function redo() {
     if (!redoStack.length) return;
     undoStack.push(JSON.stringify(edits)); edits=JSON.parse(redoStack.pop());
-    redraw(); refreshPageInfo(); toast("Edit restored.");
+    redraw(); refreshPageInfo(); scheduleAutosave(); toast("Edit restored.");
   }
   function downloadFile(bytes, filename, mime="application/pdf") {
     if (window.EditoraNative && typeof window.EditoraNative.saveBase64File==="function") {
@@ -225,7 +303,7 @@
       $("welcome").classList.add("hidden");$("editorView").classList.remove("hidden");
       $("documentName").textContent=sourceName;$("documentMeta").textContent=sizeLabel(bytes.byteLength)+" · PDF document";
       $("sideFileName").textContent=sourceName;$("sideFileSize").textContent=sizeLabel(bytes.byteLength);
-      refreshPageInfo();await renderPage();toast("PDF opened. Choose a tool to start editing.");
+      refreshPageInfo();await renderPage();scheduleAutosave();toast("PDF opened. Choose a tool to start editing.");
     } catch(error) {console.error(error);toast("Could not open this PDF. It may be damaged or password-protected.");}
     finally {setBusy(false);}
   }
@@ -291,7 +369,7 @@
     const size=Number(prompt("Text size in PDF points (8–36):","12"));if(!Number.isFinite(size)&&size!==0)return;
     const p=pointToPdf(screen);historyPoint();
     pageEdits().push({type:"text",x:p.x,y:p.y,text,fontSize:Math.max(8,Math.min(36,size||12)),color:"#20243a"});
-    redraw();refreshPageInfo();toast("Text added. Download to apply it to your PDF.");
+    redraw();refreshPageInfo();scheduleAutosave();toast("Text added. Download to apply it to your PDF.");
   }
   function chooseImage(screen) {imagePoint=screen;imageInput.click();}
   imageInput.addEventListener("change",async()=>{
@@ -304,7 +382,7 @@
         const width=Math.min(180,Math.max(70,150)),height=width*img.naturalHeight/img.naturalWidth;
         const r=screenRectToPdf(imagePoint.x,imagePoint.y,width,height);historyPoint();
         pageEdits().push({type:"image",x:r.x,y:r.y,w:r.w,h:r.h,dataUrl});
-        redraw();refreshPageInfo();toast("Image inserted. Download to embed it in the PDF.");imagePoint=null;imageInput.value="";
+        redraw();refreshPageInfo();scheduleAutosave();toast("Image inserted. Download to embed it in the PDF.");imagePoint=null;imageInput.value="";
       };
       img.onerror=()=>{toast("Could not read this image.");imageInput.value="";};img.src=dataUrl;
     }catch(error){console.error(error);toast("Could not load the image.");imageInput.value="";}
@@ -330,21 +408,21 @@
       if(done.points.length<2){redraw();return;}
       historyPoint();
       pageEdits().push({type:"path",points:done.points.map(pointToPdf),color:done.color,width:done.width/(viewport.scale||1)});
-      redraw();refreshPageInfo();toast(done.type==="signature"?"Signature stroke added.":"Drawing added.");return;
+      redraw();refreshPageInfo();scheduleAutosave();toast(done.type==="signature"?"Signature stroke added.":"Drawing added.");return;
     }
     if(done.points.length<2){redraw();return;}
     const a=done.points[0],b=done.points[done.points.length-1],x=Math.min(a.x,b.x),y=Math.min(a.y,b.y),w=Math.abs(b.x-a.x),h=Math.abs(b.y-a.y);
     if(w<3||h<3){redraw();return;}
     const rect=screenRectToPdf(x,y,w,h);
     if(done.type==="highlight") {
-      historyPoint();pageEdits().push({type:"highlight",...rect,color:"#ffe66b"});redraw();refreshPageInfo();toast("Highlight added.");
+      historyPoint();pageEdits().push({type:"highlight",...rect,color:"#ffe66b"});redraw();refreshPageInfo();scheduleAutosave();toast("Highlight added.");
     } else if(done.type==="replace") {
       const text=prompt("Enter replacement text. The selected area will be visually covered.");if(text===null){redraw();return;}
       const size=Number(prompt("Replacement text size (8–24):","11"))||11,p=pointToPdf({x:x+3,y:y+3});
       historyPoint();
       pageEdits().push({type:"cover",...rect});
       pageEdits().push({type:"text",x:p.x,y:p.y,text,fontSize:Math.max(8,Math.min(24,size)),color:"#20243a"});
-      redraw();refreshPageInfo();toast("Area covered and replacement added. This is visual replacement, not source-text redaction.");
+      redraw();refreshPageInfo();scheduleAutosave();toast("Area covered and replacement added. This is visual replacement, not source-text redaction.");
     }
   }
   noteCanvas.addEventListener("pointerup",finishGesture);
@@ -365,8 +443,8 @@
   mergeInput.addEventListener("change",()=>mergeFiles(mergeInput.files));
   $("prevPageButton").addEventListener("click",()=>pageStep(-1));$("nextPageButton").addEventListener("click",()=>pageStep(1));
   $("pageNumber").addEventListener("change",()=>{if(!pdfDocument)return;const want=Math.max(1,Math.min(pdfDocument.numPages,Number($("pageNumber").value)||1)),pages=visiblePages();currentPage=pages.includes(want)?want:(pages.find(n=>n>=want)||pages[pages.length-1]);renderPage();});
-  $("zoomInButton").addEventListener("click",()=>{zoom=Math.min(2.6,zoom+.15);renderPage();});
-  $("zoomOutButton").addEventListener("click",()=>{zoom=Math.max(.5,zoom-.15);renderPage();});
+  $("zoomInButton").addEventListener("click",()=>{zoom=Math.min(2.6,zoom+.15);scheduleAutosave();renderPage();});
+  $("zoomOutButton").addEventListener("click",()=>{zoom=Math.max(.5,zoom-.15);scheduleAutosave();renderPage();});
 
   // Custom two-finger pinch zoom for touch devices.
   let pinchStartDistance = 0, pinchStartZoom = 1, pinchActive = false, pinchRenderQueued = false;
@@ -386,6 +464,7 @@
     event.preventDefault();
     const ratio = touchDistance(event.touches) / pinchStartDistance;
     zoom = Math.max(.5, Math.min(2.6, pinchStartZoom * ratio));
+    scheduleAutosave();
     $("zoomLabel").textContent = Math.round(zoom * 100) + "%";
     if (!pinchRenderQueued) {
       pinchRenderQueued = true;
@@ -403,8 +482,8 @@
   }
   viewportHost.addEventListener("touchend", finishPinch, {passive:true});
   viewportHost.addEventListener("touchcancel", finishPinch, {passive:true});
-  $("rotateButton").addEventListener("click",()=>{if(!pdfDocument)return;rotations[currentPage]=((rotations[currentPage]||0)+90)%360;renderPage();toast("Page rotated. Download to save the change.");});
-  $("deletePageButton").addEventListener("click",()=>{if(!pdfDocument)return;if(visiblePages().length<=1)return toast("At least one page must remain.");if(!confirm("Mark page "+currentPage+" for removal from the exported PDF?"))return;removed.add(currentPage);currentPage=visiblePages().find(n=>n>currentPage)||visiblePages().slice(-1)[0];refreshPageInfo();renderPage();toast("Page marked for removal; download to apply it.");});
+  $("rotateButton").addEventListener("click",()=>{if(!pdfDocument)return;rotations[currentPage]=((rotations[currentPage]||0)+90)%360;scheduleAutosave();renderPage();toast("Page rotated. Download to save the change.");});
+  $("deletePageButton").addEventListener("click",()=>{if(!pdfDocument)return;if(visiblePages().length<=1)return toast("At least one page must remain.");if(!confirm("Mark page "+currentPage+" for removal from the exported PDF?"))return;removed.add(currentPage);currentPage=visiblePages().find(n=>n>currentPage)||visiblePages().slice(-1)[0];scheduleAutosave();refreshPageInfo();renderPage();toast("Page marked for removal; download to apply it.");});
   $("undoButton").addEventListener("click",undo);$("redoButton").addEventListener("click",redo);
   document.querySelectorAll("[data-tool]").forEach(button=>button.addEventListener("click",()=>setTool(button.dataset.tool)));
   const drop=$("dropZone");
@@ -416,4 +495,5 @@
   window.addEventListener("resize",()=>{if(pdfDocument)renderPage();});
   if(!window.pdfjsLib||!window.PDFLib)window.addEventListener("load",()=>setTimeout(()=>{if(!window.pdfjsLib||!window.PDFLib)toast("PDF libraries didn't load. Check your internet and reload.",6000);},1000));
   setTool("select");
+  window.addEventListener("load", () => { if (window.pdfjsLib && window.PDFLib) restoreLocalWorkspace(); });
 })();
