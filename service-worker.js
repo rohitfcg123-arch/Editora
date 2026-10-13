@@ -1,10 +1,10 @@
-const CACHE_NAME = "editora-shell-v3";
+const CACHE_NAME = "editora-shell-v4";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./assets/css/styles.css?v=1",
-  "./assets/js/editor.js?v=3",
+  "./assets/js/editor.js?v=4",
   "./assets/editora-icon.svg"
 ];
 
