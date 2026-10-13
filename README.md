@@ -47,3 +47,12 @@ To deploy the current rules from a local machine with Firebase CLI configured fo
     firebase deploy --only firestore:rules,storage
 
 Do not add private API keys or service-account credentials to this public repository.
+
+## Download a debug APK from GitHub Actions
+
+1. Open the repository's **Actions** tab.
+2. Open the latest **Build Editora Android APK** run and wait for the green check.
+3. In **Artifacts**, download `editora-android-debug-apk`.
+4. Extract the ZIP and install `app-debug.apk` on your Android phone. Android may ask you to allow installs from the browser/file manager.
+
+The APK is a WebView shell, not an offline native PDF engine. It needs the GitHub Pages site and internet access to load the shared editor.
