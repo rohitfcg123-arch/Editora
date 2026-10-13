@@ -1,0 +1,11 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Editora v1 is local-first and does not require Firestore.
+    // Keep all remote data blocked until authenticated cloud features
+    // and their ownership model are implemented and reviewed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
