@@ -219,7 +219,7 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
-    private class DownloadBridge(private val activity: MainActivity) {
+    class DownloadBridge(private val activity: MainActivity) {
         @JavascriptInterface
         fun saveBase64File(name: String, mimeType: String, base64: String) {
             Thread {
