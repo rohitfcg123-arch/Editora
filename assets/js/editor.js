@@ -392,7 +392,9 @@
         const a = viewport.convertToViewportPoint(item.transform[4], item.transform[5]);
         const h = Math.max(10, Math.abs(item.height || item.transform[3] || 10) * viewport.scale);
         const w = Math.max(18, (item.width || item.str.length * 5) * viewport.scale);
-        const rect = {x:a[0], y:a[1]-h, w, h:h*1.4};
+        // Give the cover a small safety margin so the original glyphs cannot peek
+        // around the replacement (PDF text metrics often under-report glyph bounds).
+        const rect = {x:a[0]-2, y:a[1]-h*1.25, w:w+5, h:h*1.8};
         if (screen.x >= rect.x-8 && screen.x <= rect.x+rect.w+8 && screen.y >= rect.y-8 && screen.y <= rect.y+rect.h+8) {
           const distance = Math.hypot(screen.x-(rect.x+rect.w/2), screen.y-(rect.y+rect.h/2));
           if (distance < best) { best=distance; hit={item,rect}; }
