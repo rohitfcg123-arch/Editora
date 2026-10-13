@@ -369,13 +369,11 @@
     }catch(error){console.error(error);toast("Merge failed. One PDF may be damaged or password-protected.");}
     finally{setBusy(false);mergeInput.value="";}
   }
-  async function addText(screen) {
-    // Find the PDF text item under the tap, then edit in-place with the mobile keyboard.
-    let hit = null;
+  async function findPdfTextAt(screen) {
     try {
       const page = await pdfDocument.getPage(currentPage);
       const content = await page.getTextContent();
-      let best = Infinity;
+      let best = Infinity, hit = null;
       for (const item of content.items || []) {
         if (!item.str || !item.str.trim() || !item.transform) continue;
         const a = viewport.convertToViewportPoint(item.transform[4], item.transform[5]);
@@ -387,8 +385,20 @@
           if (distance < best) { best=distance; hit={item,rect}; }
         }
       }
-    } catch (error) { console.warn("PDF text hit-test failed", error); }
+      return hit;
+    } catch (error) {
+      console.warn("PDF text scan failed", error);
+      return null;
+    }
+  }
+  async function addText(screen) {
+    const hit = await findPdfTextAt(screen);
     openInlineTextEditor(screen, hit);
+  }
+  async function editTextAtTap(screen) {
+    const hit = await findPdfTextAt(screen);
+    if (hit) openInlineTextEditor(screen, hit);
+    else toast("No selectable PDF text here. This may be a scanned/image PDF; use OCR or the Text tool to add text.");
   }
   function openInlineTextEditor(screen, hit) {
     const bounds = noteCanvas.getBoundingClientRect();
@@ -459,6 +469,7 @@
     if(!pdfDocument||busy||gesture)return;
     const p=currentPoint(event);
     if(activeTool==="text") addText(p);
+    else if(activeTool==="select") editTextAtTap(p);
     if(activeTool==="image") chooseImage(p);
   });
   noteCanvas.addEventListener("pointerdown",event=>{
