@@ -236,6 +236,9 @@
     document.querySelectorAll("[data-tool]").forEach(b=>b.classList.toggle("active",b.dataset.tool===tool));
     $("toolHint").textContent=hints[tool]||"Choose a tool.";
     noteCanvas.style.cursor=tool==="select"?"default":tool==="text"||tool==="image"?"copy":"crosshair";
+    // In navigation mode, let the browser scroll the zoomed page with one finger.
+    // Drawing/editing tools retain touch capture so gestures still work.
+    noteCanvas.style.touchAction = tool === "select" ? "pan-x pan-y" : "none";
   }
   function historyPoint() {
     undoStack.push(JSON.stringify(edits));
