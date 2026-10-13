@@ -369,8 +369,7 @@
     finally{setBusy(false);mergeInput.value="";}
   }
   async function addText(screen) {
-    // When Text is selected, detect existing PDF text under the tap.
-    // Existing text is visually covered and replaced; blank input removes it visually.
+    // Find the PDF text item under the tap, then edit in-place with the mobile keyboard.
     let hit = null;
     try {
       const page = await pdfDocument.getPage(currentPage);
@@ -378,39 +377,66 @@
       let best = Infinity;
       for (const item of content.items || []) {
         if (!item.str || !item.str.trim() || !item.transform) continue;
-        const tx = item.transform[4], ty = item.transform[5];
-        const a = viewport.convertToViewportPoint(tx, ty);
-        const h = Math.max(8, Math.abs(item.height || item.transform[3] || 10) * viewport.scale);
-        const w = Math.max(8, (item.width || item.str.length * 5) * viewport.scale);
-        const rect = {x:a[0], y:a[1]-h, w, h:h*1.35};
-        if (screen.x >= rect.x-5 && screen.x <= rect.x+rect.w+5 &&
-            screen.y >= rect.y-5 && screen.y <= rect.y+rect.h+5) {
+        const a = viewport.convertToViewportPoint(item.transform[4], item.transform[5]);
+        const h = Math.max(10, Math.abs(item.height || item.transform[3] || 10) * viewport.scale);
+        const w = Math.max(18, (item.width || item.str.length * 5) * viewport.scale);
+        const rect = {x:a[0], y:a[1]-h, w, h:h*1.4};
+        if (screen.x >= rect.x-8 && screen.x <= rect.x+rect.w+8 && screen.y >= rect.y-8 && screen.y <= rect.y+rect.h+8) {
           const distance = Math.hypot(screen.x-(rect.x+rect.w/2), screen.y-(rect.y+rect.h/2));
           if (distance < best) { best=distance; hit={item,rect}; }
         }
       }
-    } catch (error) { console.warn("Could not detect text at tap point", error); }
-    if (hit) {
-      const original = hit.item.str;
-      const replacement = prompt("Edit selected text. Leave empty to cover/remove it:", original);
-      if (replacement === null) return;
+    } catch (error) { console.warn("PDF text hit-test failed", error); }
+    openInlineTextEditor(screen, hit);
+  }
+  function openInlineTextEditor(screen, hit) {
+    const bounds = noteCanvas.getBoundingClientRect();
+    const scaleX = bounds.width / noteCanvas.width, scaleY = bounds.height / noteCanvas.height;
+    const r = hit ? hit.rect : {x:screen.x, y:screen.y-18, w:160, h:30};
+    const input = document.createElement("textarea");
+    input.setAttribute("aria-label", hit ? "Edit PDF text" : "Add PDF text");
+    input.value = hit ? hit.item.str : "";
+    input.rows = 1;
+    Object.assign(input.style, {
+      position:"absolute", zIndex:"30", left:(r.x*scaleX)+"px", top:(r.y*scaleY)+"px",
+      width:Math.max(70,Math.min(260,r.w*scaleX+28))+"px",
+      minHeight:Math.max(30,r.h*scaleY+8)+"px", padding:"2px 4px",
+      boxSizing:"border-box", resize:"none", overflow:"hidden",
+      border:"2px solid #6257e8", borderRadius:"3px", outline:"none",
+      background:"#fff", color:"#20243a", font:"16px Arial,sans-serif",
+      lineHeight:"1.25", boxShadow:"0 1px 5px rgba(0,0,0,.16)"
+    });
+    stack.appendChild(input);
+    input.focus();
+    input.select();
+    let finished = false;
+    const commit = () => {
+      if (finished) return;
+      finished = true;
+      const value = input.value;
+      input.remove();
       historyPoint();
-      const rect = screenRectToPdf(hit.rect.x, hit.rect.y, hit.rect.w, hit.rect.h);
-      pageEdits().push({type:"cover", ...rect});
-      if (replacement.length) {
-        const p = pointToPdf({x:hit.rect.x, y:hit.rect.y+Math.min(hit.rect.h*.85, hit.rect.h-2)});
-        const fontSize = Math.max(7, Math.min(36, (hit.item.height || 10)));
-        pageEdits().push({type:"text",x:p.x,y:p.y,text:replacement,fontSize,color:"#20243a"});
+      if (hit) {
+        const rect = screenRectToPdf(hit.rect.x,hit.rect.y,hit.rect.w,hit.rect.h);
+        pageEdits().push({type:"cover",...rect});
+        if (value.trim()) {
+          const p = pointToPdf({x:hit.rect.x,y:hit.rect.y+Math.min(hit.rect.h*.85,hit.rect.h-2)});
+          pageEdits().push({type:"text",x:p.x,y:p.y,text:value,fontSize:Math.max(7,Math.min(36,hit.item.height||10)),color:"#20243a"});
+        }
+      } else if (value.length) {
+        const p=pointToPdf(screen);
+        pageEdits().push({type:"text",x:p.x,y:p.y,text:value,fontSize:12,color:"#20243a"});
+      } else {
+        undoStack.pop();
       }
       redraw();refreshPageInfo();scheduleAutosave();
-      toast(replacement.length ? "Text visually replaced. Download to apply." : "Text visually covered. Download to apply.");
-      return;
-    }
-    const text=prompt("Enter the text to add:");if(text===null||text==="")return;
-    const size=Number(prompt("Text size in PDF points (8–36):","12"));if(!Number.isFinite(size)&&size!==0)return;
-    const p=pointToPdf(screen);historyPoint();
-    pageEdits().push({type:"text",x:p.x,y:p.y,text,fontSize:Math.max(8,Math.min(36,size||12)),color:"#20243a"});
-    redraw();refreshPageInfo();scheduleAutosave();toast("Text added. Download to apply it to your PDF.");
+      toast(hit ? (value.trim() ? "Text visually replaced." : "Text visually removed.") : (value ? "Text added." : "No text added."));
+    };
+    input.addEventListener("keydown",event=>{
+      if(event.key==="Enter" && !event.shiftKey){event.preventDefault();input.blur();}
+      if(event.key==="Escape"){finished=true;input.remove();}
+    });
+    input.addEventListener("blur",commit);
   }
   function chooseImage(screen) {imagePoint=screen;imageInput.click();}
   imageInput.addEventListener("change",async()=>{
