@@ -367,6 +367,42 @@
   $("pageNumber").addEventListener("change",()=>{if(!pdfDocument)return;const want=Math.max(1,Math.min(pdfDocument.numPages,Number($("pageNumber").value)||1)),pages=visiblePages();currentPage=pages.includes(want)?want:(pages.find(n=>n>=want)||pages[pages.length-1]);renderPage();});
   $("zoomInButton").addEventListener("click",()=>{zoom=Math.min(2.6,zoom+.15);renderPage();});
   $("zoomOutButton").addEventListener("click",()=>{zoom=Math.max(.5,zoom-.15);renderPage();});
+
+  // Custom two-finger pinch zoom for touch devices.
+  let pinchStartDistance = 0, pinchStartZoom = 1, pinchActive = false, pinchRenderQueued = false;
+  function touchDistance(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy);
+  }
+  viewportHost.addEventListener("touchstart", event => {
+    if (!pdfDocument || event.touches.length !== 2) return;
+    pinchActive = true;
+    pinchStartDistance = touchDistance(event.touches);
+    pinchStartZoom = zoom;
+  }, {passive:true});
+  viewportHost.addEventListener("touchmove", event => {
+    if (!pinchActive || event.touches.length !== 2 || !pinchStartDistance) return;
+    event.preventDefault();
+    const ratio = touchDistance(event.touches) / pinchStartDistance;
+    zoom = Math.max(.5, Math.min(2.6, pinchStartZoom * ratio));
+    $("zoomLabel").textContent = Math.round(zoom * 100) + "%";
+    if (!pinchRenderQueued) {
+      pinchRenderQueued = true;
+      requestAnimationFrame(() => {
+        pinchRenderQueued = false;
+        if (pinchActive && pdfDocument) renderPage();
+      });
+    }
+  }, {passive:false});
+  function finishPinch(event) {
+    if (event.touches.length < 2) {
+      pinchActive = false;
+      pinchStartDistance = 0;
+    }
+  }
+  viewportHost.addEventListener("touchend", finishPinch, {passive:true});
+  viewportHost.addEventListener("touchcancel", finishPinch, {passive:true});
   $("rotateButton").addEventListener("click",()=>{if(!pdfDocument)return;rotations[currentPage]=((rotations[currentPage]||0)+90)%360;renderPage();toast("Page rotated. Download to save the change.");});
   $("deletePageButton").addEventListener("click",()=>{if(!pdfDocument)return;if(visiblePages().length<=1)return toast("At least one page must remain.");if(!confirm("Mark page "+currentPage+" for removal from the exported PDF?"))return;removed.add(currentPage);currentPage=visiblePages().find(n=>n>currentPage)||visiblePages().slice(-1)[0];refreshPageInfo();renderPage();toast("Page marked for removal; download to apply it.");});
   $("undoButton").addEventListener("click",undo);$("redoButton").addEventListener("click",redo);
