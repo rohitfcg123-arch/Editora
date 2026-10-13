@@ -394,7 +394,7 @@
         const w = Math.max(18, (item.width || item.str.length * 5) * viewport.scale);
         // Give the cover a small safety margin so the original glyphs cannot peek
         // around the replacement (PDF text metrics often under-report glyph bounds).
-        const rect = {x:a[0]-2, y:a[1]-h*1.25, w:w+5, h:h*1.8};
+        const rect = {x:a[0]-3, y:a[1]-h*1.35, w:w+8, h:h*1.9};
         if (screen.x >= rect.x-8 && screen.x <= rect.x+rect.w+8 && screen.y >= rect.y-8 && screen.y <= rect.y+rect.h+8) {
           const distance = Math.hypot(screen.x-(rect.x+rect.w/2), screen.y-(rect.y+rect.h/2));
           if (distance < best) { best=distance; hit={item,rect}; }
