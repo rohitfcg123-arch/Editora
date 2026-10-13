@@ -524,9 +524,9 @@
     const pages=visiblePages(),index=pages.indexOf(currentPage),next=pages[index+delta];
     if(next){currentPage=next;renderPage();}
   }
-  $("closePdfButton").addEventListener("click", async () => {
-    if (!sourceBytes) return;
-    const ok = confirm("Remove this PDF from the editor? Unsaved edits will be discarded. Download first if you need to keep them.");
+  async function removeCurrentPdf() {
+    if (!sourceBytes) { toast("No PDF is currently open."); return; }
+    const ok = window.confirm("Remove this PDF from the editor? Unsaved edits will be discarded. Download first if you need to keep them.");
     if (!ok) return;
     clearTimeout(autosaveTimer);
     try { await localDbAction("readwrite", store => store.delete("current")); } catch (error) { console.warn("Could not clear local workspace", error); }
@@ -539,7 +539,10 @@
     $("zoomInButton").disabled = true; $("zoomOutButton").disabled = true;
     refreshPageInfo(); status("PDF removed · Open another PDF to continue");
     toast("PDF removed from the editor. Your original file on the device is unchanged.");
-  });
+  }
+  const closePdfButton = $("closePdfButton");
+  closePdfButton.addEventListener("click", event => { event.preventDefault(); event.stopPropagation(); removeCurrentPdf(); });
+  closePdfButton.addEventListener("touchend", event => { event.preventDefault(); removeCurrentPdf(); }, {passive:false});
   $("openButton").addEventListener("click",()=>fileInput.click());
   $("welcomeOpenButton").addEventListener("click",()=>fileInput.click());
   $("sideOpenButton").addEventListener("click",()=>fileInput.click());
