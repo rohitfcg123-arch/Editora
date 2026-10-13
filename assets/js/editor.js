@@ -340,7 +340,7 @@
       historyPoint();pageEdits().push({type:"highlight",...rect,color:"#ffe66b"});redraw();refreshPageInfo();toast("Highlight added.");
     } else if(done.type==="replace") {
       const text=prompt("Enter replacement text. The selected area will be visually covered.");if(text===null){redraw();return;}
-      const size=Number(prompt("Replacement text size (8–24):","11"))||11,p=pointToPdf({x:x+3,y:y+Math.min(h-2,3+size)});
+      const size=Number(prompt("Replacement text size (8–24):","11"))||11,p=pointToPdf({x:x+3,y:y+3});
       historyPoint();
       pageEdits().push({type:"cover",...rect});
       pageEdits().push({type:"text",x:p.x,y:p.y,text,fontSize:Math.max(8,Math.min(24,size)),color:"#20243a"});
