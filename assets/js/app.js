@@ -168,7 +168,6 @@
     });
     $("toolHint").textContent = toolHints[tool] || "Choose a tool.";
     annotationCanvas.style.cursor = tool === "select" ? "default" : tool === "text" || tool === "image" ? "copy" : "crosshair";
-    if (pdfDocument && tool === "image") imageInput.click();
   }
 
   function pointerPosition(event) {
@@ -194,32 +193,92 @@
     ctx.restore();
   }
 
+  function viewportMetadata() {
+    if (!lastViewport) return { viewTransform: [1, 0, 0, -1, 0, 0], viewInverse: [1, 0, 0, -1, 0, 0], viewScale: 1 };
+    const t = lastViewport.transform;
+    const det = t[0] * t[3] - t[1] * t[2];
+    const inverse = [
+      t[3] / det, -t[1] / det, -t[2] / det, t[0] / det,
+      (t[2] * t[5] - t[3] * t[4]) / det,
+      (t[1] * t[4] - t[0] * t[5]) / det
+    ];
+    return { viewTransform: Array.from(t), viewInverse: inverse, viewScale: lastViewport.scale };
+  }
+
+  function pointThroughMatrix(point, matrix) {
+    return {
+      x: matrix[0] * point.x + matrix[2] * point.y + matrix[4],
+      y: matrix[1] * point.x + matrix[3] * point.y + matrix[5]
+    };
+  }
+
+  function opPointToPdf(op, point) {
+    return pointThroughMatrix(point, op.viewInverse || [1, 0, 0, -1, 0, 0]);
+  }
+
+  function opPointToCurrentCanvas(op, point) {
+    if (!lastViewport) return point;
+    const pdfPoint = opPointToPdf(op, point);
+    const currentPoint = lastViewport.convertToViewportPoint(pdfPoint.x, pdfPoint.y);
+    return { x: currentPoint[0], y: currentPoint[1] };
+  }
+
+  function opRectToPdf(op, x, y, w, h) {
+    const pts = [
+      opPointToPdf(op, { x, y }),
+      opPointToPdf(op, { x: x + w, y }),
+      opPointToPdf(op, { x, y: y + h }),
+      opPointToPdf(op, { x: x + w, y: y + h })
+    ];
+    const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+    return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+  }
+
+  function opRectToCurrentCanvas(op, x, y, w, h) {
+    const pdfRect = opRectToPdf(op, x, y, w, h);
+    const points = [
+      lastViewport.convertToViewportPoint(pdfRect.x, pdfRect.y),
+      lastViewport.convertToViewportPoint(pdfRect.x + pdfRect.w, pdfRect.y),
+      lastViewport.convertToViewportPoint(pdfRect.x, pdfRect.y + pdfRect.h),
+      lastViewport.convertToViewportPoint(pdfRect.x + pdfRect.w, pdfRect.y + pdfRect.h)
+    ];
+    const xs = points.map(p => p[0]), ys = points.map(p => p[1]);
+    return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+  }
+
   function drawOperation(ctx, op) {
     ctx.save();
     if (op.type === "text") {
+      const point = opPointToCurrentCanvas(op, { x: op.x, y: op.y });
+      const size = Math.max(4, (op.fontSize || 16) / (op.viewScale || 1) * lastViewport.scale);
       ctx.fillStyle = op.color || "#20243a";
-      ctx.font = (op.fontSize || 16) + "px Arial, sans-serif";
+      ctx.font = size + "px Arial, sans-serif";
       ctx.textBaseline = "top";
       const lines = String(op.text || "").split("\n");
-      lines.forEach((line, i) => ctx.fillText(line, op.x, op.y + i * (op.fontSize || 16) * 1.25));
-    } else if (op.type === "cover") {
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(op.x, op.y, op.w, op.h);
-      ctx.strokeStyle = "#d8deea";
-      ctx.lineWidth = 0.7;
-      ctx.strokeRect(op.x, op.y, op.w, op.h);
-    } else if (op.type === "highlight") {
-      ctx.globalAlpha = 0.34;
-      ctx.fillStyle = op.color || "#ffe66b";
-      ctx.fillRect(op.x, op.y, op.w, op.h);
+      lines.forEach((line, i) => ctx.fillText(line, point.x, point.y + i * size * 1.25));
+    } else if (op.type === "cover" || op.type === "highlight" || op.type === "image") {
+      const rect = opRectToCurrentCanvas(op, op.x, op.y, op.w, op.h);
+      if (op.type === "cover") {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+        ctx.strokeStyle = "#d8deea";
+        ctx.lineWidth = 0.7;
+        ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+      } else if (op.type === "highlight") {
+        ctx.globalAlpha = 0.34;
+        ctx.fillStyle = op.color || "#ffe66b";
+        ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+      } else if (op.dataUrl) {
+        const image = new Image();
+        image.onload = () => {
+          if (lastRenderedPage === currentPage) ctx.drawImage(image, rect.x, rect.y, rect.w, rect.h);
+        };
+        image.src = op.dataUrl;
+      }
     } else if (op.type === "path") {
-      drawPath(ctx, op.points, op.color, op.width);
-    } else if (op.type === "image" && op.dataUrl) {
-      const image = new Image();
-      image.onload = () => {
-        if (lastRenderedPage === currentPage) ctx.drawImage(image, op.x, op.y, op.w, op.h);
-      };
-      image.src = op.dataUrl;
+      const points = (op.points || []).map(point => opPointToCurrentCanvas(op, point));
+      const width = (op.width || 2.5) / (op.viewScale || 1) * lastViewport.scale;
+      drawPath(ctx, points, op.color, width);
     }
     ctx.restore();
   }
@@ -333,15 +392,8 @@
     }
   }
 
-  function mapRectToPdf(viewport, x, y, w, h) {
-    const pts = [
-      viewport.convertToPdfPoint(x, y),
-      viewport.convertToPdfPoint(x + w, y),
-      viewport.convertToPdfPoint(x, y + h),
-      viewport.convertToPdfPoint(x + w, y + h)
-    ];
-    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
-    return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+  function mapRectToPdf(op, x, y, w, h) {
+    return opRectToPdf(op, x, y, w, h);
   }
 
   async function buildEditedPdf() {
@@ -359,17 +411,10 @@
       const rotationAmount = pageRotations[pageNo] || 0;
       if (rotationAmount) page.setRotation(degrees(((page.getRotation().angle || 0) + rotationAmount) % 360));
 
-      const viewport = pageNo === currentPage && lastViewport
-        ? lastViewport
-        : (await pdfDocument.getPage(pageNo)).getViewport({
-            scale: lastViewport ? lastViewport.scale : 1,
-            rotation: (((await pdfDocument.getPage(pageNo)).rotate || 0) + rotationAmount) % 360
-          });
-
       for (const op of editsFor(pageNo)) {
         if (op.type === "text") {
-          const point = viewport.convertToPdfPoint(op.x, op.y);
-          const fontSize = Math.max(4, (op.fontSize || 16) / viewport.scale);
+          const point = opPointToPdf(op, { x: op.x, y: op.y });
+          const fontSize = Math.max(4, (op.fontSize || 16) / (op.viewScale || 1));
           const colorHex = op.color || "#20243a";
           const color = rgb(parseInt(colorHex.slice(1, 3), 16) / 255, parseInt(colorHex.slice(3, 5), 16) / 255, parseInt(colorHex.slice(5, 7), 16) / 255);
           const lines = String(op.text || "").split("\n");
@@ -377,7 +422,7 @@
             page.drawText(line, { x: point[0], y: point[1] - fontSize - lineIndex * fontSize * .25, size: fontSize, font, color, maxWidth: Math.max(25, 900 / viewport.scale) });
           });
         } else if (op.type === "cover" || op.type === "highlight") {
-          const rect = mapRectToPdf(viewport, op.x, op.y, op.w, op.h);
+          const rect = mapRectToPdf(op, op.x, op.y, op.w, op.h);
           const c = op.type === "cover" ? rgb(1, 1, 1) : rgb(1, .9, .2);
           page.drawRectangle({
             x: rect.x, y: rect.y, width: Math.max(1, rect.w), height: Math.max(1, rect.h),
@@ -387,14 +432,14 @@
           });
         } else if (op.type === "path" && op.points && op.points.length) {
           for (let j = 1; j < op.points.length; j++) {
-            const from = viewport.convertToPdfPoint(op.points[j - 1].x, op.points[j - 1].y);
-            const to = viewport.convertToPdfPoint(op.points[j].x, op.points[j].y);
+            const from = opPointToPdf(op, op.points[j - 1]);
+            const to = opPointToPdf(op, op.points[j]);
             const hex = op.color || "#242943";
             const color = rgb(parseInt(hex.slice(1, 3), 16) / 255, parseInt(hex.slice(3, 5), 16) / 255, parseInt(hex.slice(5, 7), 16) / 255);
-            page.drawLine({ start: { x: from[0], y: from[1] }, end: { x: to[0], y: to[1] }, thickness: Math.max(1, (op.width || 2.5) / viewport.scale), color });
+            page.drawLine({ start: { x: from[0], y: from[1] }, end: { x: to[0], y: to[1] }, thickness: Math.max(1, (op.width || 2.5) / (op.viewScale || 1)), color });
           }
         } else if (op.type === "image" && op.dataUrl) {
-          const rect = mapRectToPdf(viewport, op.x, op.y, op.w, op.h);
+          const rect = mapRectToPdf(op, op.x, op.y, op.w, op.h);
           const base64 = op.dataUrl.split(",")[1];
           const imageBytes = Uint8Array.from(atob(base64), char => char.charCodeAt(0));
           const image = op.dataUrl.startsWith("data:image/png")
@@ -481,7 +526,7 @@
     if (rawSize === null) return;
     const fontSize = Math.max(8, Math.min(48, Number(rawSize) || 16));
     addHistoryPoint();
-    editsFor(currentPage).push({ type: "text", x: point.x, y: point.y, text: value, fontSize, color: "#20243a" });
+    editsFor(currentPage).push({ type: "text", x: point.x, y: point.y, text: value, fontSize, color: "#20243a", ...viewportMetadata() });
     redrawAnnotations();
     updateEditCount();
     showToast("Text added to the page. Download to apply it to the PDF.");
@@ -512,7 +557,7 @@
         const width = Math.min(200, Math.max(60, image.naturalWidth > 0 ? 150 : 120));
         const height = width * image.naturalHeight / image.naturalWidth;
         addHistoryPoint();
-        editsFor(currentPage).push({ type: "image", x: imagePlacement.x, y: imagePlacement.y, w: width, h: height, dataUrl, mime: file.type });
+        editsFor(currentPage).push({ type: "image", x: imagePlacement.x, y: imagePlacement.y, w: width, h: height, dataUrl, mime: file.type, ...viewportMetadata() });
         redrawAnnotations();
         updateEditCount();
         showToast("Image added. Download to embed it in the PDF.");
@@ -563,7 +608,7 @@
     if (finished.type === "draw" || finished.type === "signature") {
       if (finished.points.length < 2) return redrawAnnotations();
       addHistoryPoint();
-      editsFor(currentPage).push({ type: "path", points: finished.points, color: finished.color, width: finished.width });
+      editsFor(currentPage).push({ type: "path", points: finished.points, color: finished.color, width: finished.width, ...viewportMetadata() });
       redrawAnnotations();
       updateEditCount();
       showToast(finished.type === "signature" ? "Signature stroke added." : "Drawing added.");
@@ -576,7 +621,7 @@
     if (w < 3 || h < 3) return redrawAnnotations();
     if (finished.type === "highlight") {
       addHistoryPoint();
-      editsFor(currentPage).push({ type: "highlight", x, y, w, h, color: "#ffe66b" });
+      editsFor(currentPage).push({ type: "highlight", x, y, w, h, color: "#ffe66b", ...viewportMetadata() });
       redrawAnnotations();
       updateEditCount();
       showToast("Highlight added.");
@@ -587,8 +632,9 @@
       if (rawSize === null) return redrawAnnotations();
       const fontSize = Math.max(8, Math.min(36, Number(rawSize) || 13));
       addHistoryPoint();
-      editsFor(currentPage).push({ type: "cover", x, y, w, h });
-      editsFor(currentPage).push({ type: "text", x: x + 3, y: y + 2, text: replacement, fontSize, color: "#20243a" });
+      const view = viewportMetadata();
+      editsFor(currentPage).push({ type: "cover", x, y, w, h, ...view });
+      editsFor(currentPage).push({ type: "text", x: x + 3, y: y + 2, text: replacement, fontSize, color: "#20243a", ...view });
       redrawAnnotations();
       updateEditCount();
       showToast("Area covered and replacement added. This is visual replacement, not source-text rewriting.");
