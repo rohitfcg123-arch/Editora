@@ -89,7 +89,9 @@
   }
   const hints = {
     select: "Navigate the page. Choose a tool to edit.",
-    text: "Tap or click where the text should start.",
+    text: "Tap or click where new text should start.",
+    edittext: "Drag over the text area you want to replace, then enter new text.",
+    erase: "Drag over the PDF area or added annotation you want to erase.",
     replace: "Drag over the area to cover, then enter replacement text.",
     highlight: "Drag over a line or paragraph to highlight it.",
     draw: "Press and drag to draw freehand.",
@@ -205,11 +207,11 @@
     (edits[currentPage] || []).forEach(op => drawOp(noteCtx, op));
     if (!temp) return;
     if (temp.type === "draw" || temp.type === "signature") drawStroke(noteCtx, temp.points, temp.color, temp.width);
-    if ((temp.type === "highlight" || temp.type === "replace") && temp.points.length > 1) {
+    if ((temp.type === "highlight" || temp.type === "replace" || temp.type === "edittext" || temp.type === "erase") && temp.points.length > 1) {
       const a=temp.points[0], b=temp.points[temp.points.length-1];
       const x=Math.min(a.x,b.x),y=Math.min(a.y,b.y),w=Math.abs(b.x-a.x),h=Math.abs(b.y-a.y);
-      noteCtx.save(); noteCtx.fillStyle=temp.type==="highlight"?"rgba(255,230,107,.34)":"rgba(97,87,232,.13)";
-      noteCtx.strokeStyle=temp.type==="highlight"?"#d8bd34":"#756cf0"; noteCtx.setLineDash([5,4]);
+      noteCtx.save(); noteCtx.fillStyle=temp.type==="highlight"?"rgba(255,230,107,.34)":temp.type==="erase"?"rgba(220,60,80,.12)":"rgba(97,87,232,.13)";
+      noteCtx.strokeStyle=temp.type==="highlight"?"#d8bd34":temp.type==="erase"?"#d83c50":"#756cf0"; noteCtx.setLineDash([5,4]);
       noteCtx.fillRect(x,y,w,h); noteCtx.strokeRect(x,y,w,h); noteCtx.restore();
     }
   }
@@ -453,7 +455,12 @@
     const rect=screenRectToPdf(x,y,w,h);
     if(done.type==="highlight") {
       historyPoint();pageEdits().push({type:"highlight",...rect,color:"#ffe66b"});redraw();refreshPageInfo();scheduleAutosave();toast("Highlight added.");
-    } else if(done.type==="replace") {
+    } else if(done.type==="erase") {
+      historyPoint();
+      pageEdits().push({type:"cover",...rect});
+      redraw();refreshPageInfo();scheduleAutosave();
+      toast("Area visually erased with a white cover. Original PDF content is not securely removed.");
+    } else if(done.type==="replace" || done.type==="edittext") {
       const text=prompt("Enter replacement text. The selected area will be visually covered.");if(text===null){redraw();return;}
       const size=Number(prompt("Replacement text size (8–24):","11"))||11,p=pointToPdf({x:x+3,y:y+3});
       historyPoint();
