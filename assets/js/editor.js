@@ -182,7 +182,7 @@
       const p = pdfToScreen({x: op.x, y: op.y});
       const fs = Math.max(4, (op.fontSize || 12) * viewport.scale);
       ctx.fillStyle = op.color || "#20243a";
-      ctx.font = fs + "px Arial, sans-serif"; ctx.textBaseline = "alphabetic";
+      ctx.font = (op.italic ? "italic " : "") + (op.bold ? "bold " : "") + fs + "px " + (op.fontFamily || "Arial") + ", sans-serif"; ctx.textBaseline = "alphabetic"; ctx.textAlign = op.align || "left";
       String(op.text || "").split("\n").forEach((line, i) => ctx.fillText(line, p.x, p.y + fs * .8 + i * fs * 1.2));
     } else if (op.type === "cover" || op.type === "highlight" || op.type === "image") {
       const r = pdfRectToScreen(op);
@@ -316,7 +316,7 @@
     if (!sourceBytes) throw new Error("Open a PDF first.");
     const {PDFDocument,StandardFonts,rgb,degrees}=PDFLib;
     const out=await PDFDocument.load(sourceBytes.slice());
-    const font=await out.embedFont(StandardFonts.Helvetica);
+    const fontCache = {};
     const all=out.getPages();
     for (let i=0;i<all.length;i++) {
       const no=i+1;if(removed.has(no))continue;
@@ -326,7 +326,17 @@
         if(op.type==="text") {
           const fontSize=Math.max(4,op.fontSize||12),hex=(op.color||"#20243a").replace("#","");
           const color=rgb(parseInt(hex.slice(0,2),16)/255,parseInt(hex.slice(2,4),16)/255,parseInt(hex.slice(4,6),16)/255);
-          String(op.text||"").split("\n").forEach((line,index)=>page.drawText(line,{x:op.x,y:op.y-fontSize-index*fontSize*.25,size:fontSize,font,color,maxWidth:Math.max(30,page.getWidth())}));
+          const key=(op.fontFamily||"Arial")+"|"+!!op.bold+"|"+!!op.italic;
+          const standard=op.fontFamily==="Times New Roman"?(op.bold?(op.italic?StandardFonts.TimesRomanBoldItalic:StandardFonts.TimesRomanBold):(op.italic?StandardFonts.TimesRomanItalic:StandardFonts.TimesRoman))
+            :op.fontFamily==="Courier New"?(op.bold?(op.italic?StandardFonts.CourierBoldOblique:StandardFonts.CourierBold):(op.italic?StandardFonts.CourierOblique:StandardFonts.Courier))
+            :(op.bold?(op.italic?StandardFonts.HelveticaBoldOblique:StandardFonts.HelveticaBold):(op.italic?StandardFonts.HelveticaOblique:StandardFonts.Helvetica));
+          if(!fontCache[key]) fontCache[key]=await out.embedFont(standard);
+          const chosenFont=fontCache[key];
+          String(op.text||"").split("\n").forEach((line,index)=>{
+            const width=chosenFont.widthOfTextAtSize(line,fontSize);
+            const x=op.align==="center"?op.x-width/2:op.align==="right"?op.x-width:op.x;
+            page.drawText(line,{x,y:op.y-fontSize-index*fontSize*.25,size:fontSize,font:chosenFont,color,maxWidth:Math.max(30,page.getWidth())});
+          });
         } else if(op.type==="cover"||op.type==="highlight") {
           const c=op.type==="cover"?rgb(1,1,1):rgb(1,.9,.2);
           page.drawRectangle({x:op.x,y:op.y,width:Math.max(1,op.w),height:Math.max(1,op.h),color:c,opacity:op.type==="cover"?1:.32,borderWidth:0});
@@ -404,50 +414,51 @@
     const bounds = noteCanvas.getBoundingClientRect();
     const scaleX = bounds.width / noteCanvas.width, scaleY = bounds.height / noteCanvas.height;
     const r = hit ? hit.rect : {x:screen.x, y:screen.y-18, w:160, h:30};
+    const existing = hit ? (edits[currentPage] || []).slice().reverse().find(op => op.type==="text" && Math.abs(op.x-pointToPdf({x:r.x,y:r.y}).x)<8 && Math.abs(op.y-pointToPdf({x:r.x,y:r.y}).y)<20) : null;
     const input = document.createElement("textarea");
     input.setAttribute("aria-label", hit ? "Edit PDF text" : "Add PDF text");
     input.value = hit ? hit.item.str : "";
     input.rows = 1;
-    Object.assign(input.style, {
-      position:"absolute", zIndex:"30", left:(r.x*scaleX)+"px", top:(r.y*scaleY)+"px",
-      width:Math.max(70,Math.min(260,r.w*scaleX+28))+"px",
-      minHeight:Math.max(30,r.h*scaleY+8)+"px", padding:"2px 4px",
-      boxSizing:"border-box", resize:"none", overflow:"hidden",
-      border:"2px solid #6257e8", borderRadius:"3px", outline:"none",
-      background:"#fff", color:"#20243a", font:"16px Arial,sans-serif",
-      lineHeight:"1.25", boxShadow:"0 1px 5px rgba(0,0,0,.16)"
-    });
-    stack.appendChild(input);
-    input.focus();
-    input.select();
-    let finished = false;
-    const commit = () => {
-      if (finished) return;
-      finished = true;
-      const value = input.value;
-      input.remove();
+    const format = {fontFamily:existing?.fontFamily||"Arial",fontSize:existing?.fontSize||Math.max(7,Math.min(36,hit?.item.height||12)),bold:!!existing?.bold,italic:!!existing?.italic,color:existing?.color||"#20243a",align:existing?.align||"left"};
+    const toolbar=document.createElement("div");
+    Object.assign(toolbar.style,{position:"absolute",zIndex:"40",left:Math.max(0,r.x*scaleX)+"px",top:Math.max(0,(r.y*scaleY)-48)+"px",display:"flex",alignItems:"center",gap:"4px",padding:"6px",background:"#fff",border:"1px solid #d6d9e5",borderRadius:"8px",boxShadow:"0 3px 14px rgba(0,0,0,.2)",maxWidth:"calc(100% - 8px)",overflowX:"auto"});
+    const makeButton=(label,title,action)=>{const b=document.createElement("button");b.type="button";b.textContent=label;b.title=title;Object.assign(b.style,{minWidth:"32px",height:"32px",border:"1px solid #d8dbea",borderRadius:"5px",background:"#f8f9fc",fontWeight:"600",fontSize:"14px",color:"#20243a"});b.addEventListener("pointerdown",e=>e.preventDefault());b.addEventListener("click",action);toolbar.appendChild(b);return b;};
+    const boldBtn=makeButton("B","Bold",()=>{format.bold=!format.bold;syncStyle();boldBtn.style.background=format.bold?"#dedbff":"#f8f9fc";});
+    const italicBtn=makeButton("I","Italic",()=>{format.italic=!format.italic;syncStyle();italicBtn.style.background=format.italic?"#dedbff":"#f8f9fc";});
+    const font=document.createElement("select");[["Arial","Arial"],["Times New Roman","Times"],["Courier New","Courier"]].forEach(([v,t])=>{const o=document.createElement("option");o.value=v;o.textContent=t;font.appendChild(o);});font.value=format.fontFamily;
+    Object.assign(font.style,{height:"32px",maxWidth:"105px",border:"1px solid #d8dbea",borderRadius:"5px",background:"#fff",fontSize:"12px"});font.addEventListener("pointerdown",e=>e.stopPropagation());font.addEventListener("change",()=>{format.fontFamily=font.value;syncStyle();});toolbar.appendChild(font);
+    const size=document.createElement("select");[8,9,10,11,12,14,16,18,20,24,28,32,36].forEach(n=>{const o=document.createElement("option");o.value=n;o.textContent=n+" px";size.appendChild(o);});size.value=String(Math.max(8,Math.min(36,Math.round(format.fontSize))));
+    Object.assign(size.style,{height:"32px",maxWidth:"72px",border:"1px solid #d8dbea",borderRadius:"5px",background:"#fff",fontSize:"12px"});size.addEventListener("change",()=>{format.fontSize=Number(size.value);syncStyle();});toolbar.appendChild(size);
+    const color=document.createElement("input");color.type="color";color.value=format.color;color.title="Text color";Object.assign(color.style,{width:"34px",height:"32px",padding:"2px",border:"1px solid #d8dbea",borderRadius:"5px",background:"#fff"});color.addEventListener("input",()=>{format.color=color.value;syncStyle();});toolbar.appendChild(color);
+    const align=document.createElement("select");[["left","Left"],["center","Center"],["right","Right"]].forEach(([v,t])=>{const o=document.createElement("option");o.value=v;o.textContent=t;align.appendChild(o);});align.value=format.align;
+    Object.assign(align.style,{height:"32px",maxWidth:"76px",border:"1px solid #d8dbea",borderRadius:"5px",background:"#fff",fontSize:"12px"});align.addEventListener("change",()=>{format.align=align.value;syncStyle();});toolbar.appendChild(align);
+    Object.assign(input.style,{position:"absolute",zIndex:"30",left:(r.x*scaleX)+"px",top:(r.y*scaleY)+"px",width:Math.max(70,Math.min(280,r.w*scaleX+24))+"px",minHeight:Math.max(30,r.h*scaleY+6)+"px",padding:"1px 3px",boxSizing:"border-box",resize:"none",overflow:"hidden",border:"1px solid #6257e8",borderRadius:"2px",outline:"none",background:"rgba(255,255,255,.97)",boxShadow:"none",lineHeight:"1.15"});
+    function syncStyle(){input.style.fontFamily=format.fontFamily+", sans-serif";input.style.fontSize=Math.max(8,format.fontSize*scaleY)+"px";input.style.fontWeight=format.bold?"700":"400";input.style.fontStyle=format.italic?"italic":"normal";input.style.color=format.color;input.style.textAlign=format.align;}
+    syncStyle();stack.appendChild(toolbar);stack.appendChild(input);input.focus();input.select();
+    let finished=false;
+    const commit=()=>{
+      if(finished)return;finished=true;
+      const value=input.value;input.remove();toolbar.remove();
+      if(!value.trim()&&!hit)return;
       historyPoint();
-      if (hit) {
-        const rect = screenRectToPdf(hit.rect.x,hit.rect.y,hit.rect.w,hit.rect.h);
+      if(hit){
+        const rect=screenRectToPdf(hit.rect.x,hit.rect.y,hit.rect.w,hit.rect.h);
         pageEdits().push({type:"cover",...rect});
-        if (value.trim()) {
-          const p = pointToPdf({x:hit.rect.x,y:hit.rect.y+Math.min(hit.rect.h*.85,hit.rect.h-2)});
-          pageEdits().push({type:"text",x:p.x,y:p.y,text:value,fontSize:Math.max(7,Math.min(36,hit.item.height||10)),color:"#20243a"});
+        if(value.trim()){
+          const baseline=pointToPdf({x:hit.rect.x,y:hit.rect.y+Math.min(hit.rect.h*.85,hit.rect.h-2)});
+          const x=format.align==="center"?baseline.x+rect.w/2:format.align==="right"?baseline.x+rect.w:baseline.x;
+          pageEdits().push({type:"text",x,y:baseline.y,text:value,fontSize:format.fontSize,color:format.color,fontFamily:format.fontFamily,bold:format.bold,italic:format.italic,align:format.align});
         }
-      } else if (value.length) {
+      } else if(value.length){
         const p=pointToPdf(screen);
-        pageEdits().push({type:"text",x:p.x,y:p.y,text:value,fontSize:12,color:"#20243a"});
-      } else {
-        undoStack.pop();
+        pageEdits().push({type:"text",x:p.x,y:p.y,text:value,fontSize:format.fontSize,color:format.color,fontFamily:format.fontFamily,bold:format.bold,italic:format.italic,align:format.align});
       }
       redraw();refreshPageInfo();scheduleAutosave();
-      toast(hit ? (value.trim() ? "Text visually replaced." : "Text visually removed.") : (value ? "Text added." : "No text added."));
+      toast(hit?"Text visually replaced with formatting.":"Formatted text added.");
     };
-    input.addEventListener("keydown",event=>{
-      if(event.key==="Enter" && !event.shiftKey){event.preventDefault();input.blur();}
-      if(event.key==="Escape"){finished=true;input.remove();}
-    });
-    input.addEventListener("blur",commit);
+    input.addEventListener("keydown",event=>{if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();input.blur();}if(event.key==="Escape"){finished=true;input.remove();toolbar.remove();}});
+    input.addEventListener("blur",()=>setTimeout(()=>{if(!toolbar.contains(document.activeElement))commit();},120));
+    toolbar.addEventListener("focusout",()=>setTimeout(()=>{if(document.activeElement!==input&&!toolbar.contains(document.activeElement))commit();},150));
   }
   function chooseImage(screen) {imagePoint=screen;imageInput.click();}
   imageInput.addEventListener("change",async()=>{
