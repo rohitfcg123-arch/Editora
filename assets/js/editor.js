@@ -15,7 +15,7 @@
     replace: "Drag over the area to cover, then enter replacement text.",
     highlight: "Drag over a line or paragraph to highlight it.",
     draw: "Press and drag to draw freehand.",
-    image: "Tap or click where the selected image should be placed.",
+    image: "Tap or click where you want the image, then choose a PNG/JPG.",
     signature: "Draw your signature with a mouse or finger."
   };
 
