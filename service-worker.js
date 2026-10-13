@@ -4,7 +4,7 @@ const APP_SHELL = [
   "./index.html",
   "./manifest.webmanifest",
   "./assets/css/styles.css?v=1",
-  "./assets/js/app.js?v=1",
+  "./assets/js/editor.js?v=1",
   "./assets/editora-icon.svg"
 ];
 
