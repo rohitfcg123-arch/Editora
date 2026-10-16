@@ -16,9 +16,12 @@
   }
   function renderProfile() {
     const connected = Boolean(state.token);
-    $('profileName').textContent = state.user?.name || (connected ? 'Google account connected' : 'Not connected');
-    $('profileEmail').textContent = state.user?.email || (connected ? 'Account email unavailable' : 'Connect Gmail to view account details');
-    $('profileAvatar').textContent = (state.user?.name || state.user?.email || '?').trim().charAt(0).toUpperCase();
+    let remembered = null;
+    try { remembered = JSON.parse(localStorage.getItem('mailblaster.lastGoogleProfile') || 'null'); } catch {}
+    const profile = state.user || remembered;
+    $('profileName').textContent = profile?.name || (connected ? 'Google account connected' : 'Not connected');
+    $('profileEmail').textContent = profile?.email || (connected ? 'Account email unavailable' : 'No account saved on this device');
+    $('profileAvatar').textContent = (profile?.name || profile?.email || '?').trim().charAt(0).toUpperCase();
     $('profileConnection').textContent = connected ? 'Connected' : 'Not connected';
     $('profilePermission').textContent = connected ? 'Granted for this session' : 'Not granted / disconnected';
     $('profileIdentityPermission').textContent = state.user ? 'Granted (email/profile)' : 'Not available';
@@ -30,6 +33,7 @@
       if(!response.ok) throw new Error('Profile lookup failed');
       const profile = await response.json();
       state.user = {name:profile.name || '', email:profile.email || '', picture:profile.picture || ''};
+      try { localStorage.setItem('mailblaster.lastGoogleProfile', JSON.stringify(state.user)); } catch {}
     } catch (err) {
       state.user = null;
     }
@@ -167,7 +171,9 @@
     toast('Campaign finished. Sent: '+state.sent+' · Failed: '+state.failed);
   }
   $('connectBtn').addEventListener('click',connectGmail);$('sideConnectBtn').addEventListener('click',connectGmail);$('profileConnectBtn').addEventListener('click',connectGmail);
-  $('profileBtn').addEventListener('click',()=>{const panel=$('profilePanel'),open=panel.classList.toggle('hidden')===false;$('profileBtn').setAttribute('aria-expanded',String(open));if(open)renderProfile();});
+  $('profileBtn').addEventListener('click',(event)=>{event.preventDefault();event.stopPropagation();const panel=$('profilePanel');const open=panel.classList.contains('hidden');panel.classList.toggle('hidden',!open);$('profileBtn').setAttribute('aria-expanded',open?'true':'false');if(open)renderProfile();});
+  document.addEventListener('click',(event)=>{if(!$('profilePanel').contains(event.target)&&!$('profileBtn').contains(event.target)){$('profilePanel').classList.add('hidden');$('profileBtn').setAttribute('aria-expanded','false');}});
+  $('profilePanel').addEventListener('click',event=>event.stopPropagation());
   $('closeProfileBtn').addEventListener('click',()=>{$('profilePanel').classList.add('hidden');$('profileBtn').setAttribute('aria-expanded','false');});
   $('disconnectBtn').addEventListener('click',disconnectGmail);
   $('csvFile').addEventListener('change',e=>readCsv(e.target.files[0]));
