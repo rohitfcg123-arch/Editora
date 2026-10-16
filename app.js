@@ -1,9 +1,23 @@
 (() => {
   const $ = id => document.getElementById(id);
-  const state = { token: null, recipients: [], sent: 0, failed: 0, duplicates: 0, skipped: 0, sending: false, tokenClient: null, user: null, connectedAt: null };
+  const state = { token: null, tokenExpiresAt: 0, recipients: [], sent: 0, failed: 0, duplicates: 0, skipped: 0, sending: false, tokenClient: null, user: null, connectedAt: null };
   const MAX_RECIPIENTS = 50;
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   function toast(message) { const el=$('toast'); el.textContent=message; el.classList.add('show'); clearTimeout(toast.timer); toast.timer=setTimeout(()=>el.classList.remove('show'),3500); }
+  const SESSION_KEY = 'mailblaster.gmailSession.v1';
+  function saveSession() {
+    try {
+      if(state.token && state.tokenExpiresAt>Date.now()) sessionStorage.setItem(SESSION_KEY, JSON.stringify({token:state.token, expiresAt:state.tokenExpiresAt, connectedAt:state.connectedAt?.toISOString() || null}));
+      else sessionStorage.removeItem(SESSION_KEY);
+    } catch {}
+  }
+  function restoreSession() {
+    try {
+      const saved=JSON.parse(sessionStorage.getItem(SESSION_KEY)||'null');
+      if(!saved?.token || !saved?.expiresAt || saved.expiresAt<=Date.now()) { sessionStorage.removeItem(SESSION_KEY); return false; }
+      state.token=saved.token;state.tokenExpiresAt=saved.expiresAt;state.connectedAt=saved.connectedAt?new Date(saved.connectedAt):new Date();return true;
+    } catch { return false; }
+  }
   function setConnected(connected) {
     $('accountTitle').textContent = connected ? 'Gmail connected' : 'Gmail not connected';
     $('accountSubtitle').textContent = connected ? 'Ready to send from your account' : 'Connect to authorise sending';
@@ -23,7 +37,7 @@
     $('profileEmail').textContent = profile?.email || (connected ? 'Account email unavailable' : 'No account saved on this device');
     $('profileAvatar').textContent = (profile?.name || profile?.email || '?').trim().charAt(0).toUpperCase();
     $('profileConnection').textContent = connected ? 'Connected' : 'Not connected';
-    $('profilePermission').textContent = connected ? 'Granted for this session' : 'Not granted / disconnected';
+    $('profilePermission').textContent = connected ? (state.tokenExpiresAt>Date.now() ? 'Granted · token valid until ' + new Date(state.tokenExpiresAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : 'Token expired · reconnect required') : 'Not granted / disconnected';
     $('profileIdentityPermission').textContent = state.user ? 'Granted (email/profile)' : 'Not available';
     $('profileSession').textContent = connected && state.connectedAt ? 'Active since ' + state.connectedAt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : 'No active session';
   }
@@ -44,7 +58,7 @@
     if(state.token && window.google?.accounts?.oauth2?.revoke){
       google.accounts.oauth2.revoke(state.token, () => {});
     }
-    state.token=null;state.user=null;state.connectedAt=null;setConnected(false);toast('Gmail disconnected from this session.');
+    state.token=null;state.tokenExpiresAt=0;state.user=null;state.connectedAt=null;try{sessionStorage.removeItem(SESSION_KEY);}catch{}setConnected(false);toast('Gmail disconnected from this session.');
   }
   function updateSendButton() {
     $('sendBtn').disabled = state.sending || !state.token || state.recipients.length===0 || !$('subject').value.trim() || !$('message').value.trim() || !$('consent').checked;
@@ -119,7 +133,7 @@
       scope:'openid email profile https://www.googleapis.com/auth/gmail.send',
       callback: response=>{
         if(response.error){toast('Google authorisation failed: '+response.error);return;}
-        state.token=response.access_token;state.connectedAt=new Date();state.user=null;setConnected(true);loadGoogleProfile(state.token);toast('Gmail connected for this session.');
+        state.token=response.access_token;state.tokenExpiresAt=Date.now()+(Number(response.expires_in)||3600)*1000-60000;state.connectedAt=new Date();state.user=null;saveSession();setConnected(true);loadGoogleProfile(state.token);toast('Gmail connected. This tab can stay connected across refresh until the token expires.');
       },
       error_callback:err=>toast('Google sign-in error: '+(err.message||err.type||'please try again'))
     });
@@ -143,7 +157,7 @@
       method:'POST',headers:{Authorization:'Bearer '+state.token,'Content-Type':'application/json'},
       body:JSON.stringify({raw:makeRaw(recipient,personalize(subject,recipient),personalize(body,recipient))})
     });
-    if(response.status===401){state.token=null;state.user=null;state.connectedAt=null;setConnected(false);throw new Error('Gmail session expired. Reconnect Gmail to continue.');}
+    if(response.status===401){state.token=null;state.tokenExpiresAt=0;state.user=null;state.connectedAt=null;try{sessionStorage.removeItem(SESSION_KEY);}catch{}setConnected(false);throw new Error('Gmail session expired. Reconnect Gmail to continue.');}
     if(!response.ok){let detail='Gmail API error ('+response.status+')';try{const data=await response.json();detail=data.error?.message||detail;}catch{}throw new Error(detail);}
     return response.json();
   }
@@ -188,5 +202,12 @@
   ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('dragover');}));
   ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('dragover');}));
   dz.addEventListener('drop',e=>readCsv(e.dataTransfer.files[0]));
-  updateStats();setConnected(false);
+  updateStats();
+  if(restoreSession()){
+    setConnected(true);
+    loadGoogleProfile(state.token);
+    toast('Restored Gmail session for this tab.');
+  } else {
+    setConnected(false);
+  }
 })();
