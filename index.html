@@ -9,10 +9,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./styles.css?v=profile-fix-2">
+<link rel="stylesheet" href="./styles.css?v=session-refresh-fix-3">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="./config.js"></script>
-<script src="./app.js?v=profile-fix-2" defer></script>
+<script src="./app.js?v=session-refresh-fix-3" defer></script>
 </head>
 <body>
 <header class="topbar">
@@ -26,9 +26,9 @@
     <div class="profile-detail"><span>Gmail send permission</span><strong id="profilePermission">Not granted</strong></div>
     <div class="profile-detail"><span>Account identity permission</span><strong id="profileIdentityPermission">Not granted</strong></div>
     <div class="profile-detail"><span>Session</span><strong id="profileSession">No active session</strong></div>
-    <div class="profile-detail"><span>Security</span><strong>Access token kept in memory only</strong></div>
+    <div class="profile-detail"><span>Security</span><strong>Access token kept in this tab’s session storage until expiry</strong></div>
   </div>
-  <p class="profile-note">These details describe the account connected in this browser session. MailBlaster does not see your password. Disconnecting clears the local session token.</p>
+  <p class="profile-note">These details describe the account connected in this browser tab. MailBlaster does not see your password. The temporary access token is stored in session storage for this tab only and is cleared when disconnected or expired.</p>
   <div class="profile-actions"><button id="disconnectBtn" class="btn btn-outline" disabled>Disconnect account</button><button id="profileConnectBtn" class="btn btn-primary">Connect Gmail</button></div>
 </section>
 <main class="shell">
@@ -70,7 +70,7 @@
       <section class="card stats-card"><div class="side-title">THIS CAMPAIGN</div><div class="stat"><span>Valid recipients</span><strong id="statRecipients">0</strong></div><div class="stat"><span>Sent successfully</span><strong id="statSent">0</strong></div><div class="stat"><span>Failed</span><strong id="statFailed">0</strong></div><div class="stat"><span>Duplicates removed</span><strong id="statDuplicates">0</strong></div></section>
     </aside>
   </section>
-  <footer class="site-footer"><span>MailBlaster · An independent tool, not affiliated with Google.</span><span>CSV stays in your browser · Access token is kept in memory only</span><nav class="legal-links" aria-label="Legal"><a href="./privacy.html">Privacy Policy</a><a href="./terms.html">Terms of Service</a></nav></footer>
+  <footer class="site-footer"><span>MailBlaster · An independent tool, not affiliated with Google.</span><span>CSV stays in your browser · Session token is stored in this tab only</span><nav class="legal-links" aria-label="Legal"><a href="./privacy.html">Privacy Policy</a><a href="./terms.html">Terms of Service</a></nav></footer>
 </main>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>
