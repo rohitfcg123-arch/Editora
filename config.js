@@ -1,6 +1,4 @@
-// Add your Google OAuth Web Client ID here.
-// Google Cloud Console must have this website's exact origin under
-// OAuth Client > Authorized JavaScript origins, and Gmail API must be enabled.
+// Google OAuth Web Client ID for MailBlaster.
 window.MAILBLASTER_CONFIG = {
-  GOOGLE_CLIENT_ID: "PASTE_YOUR_GOOGLE_OAUTH_CLIENT_ID_HERE.apps.googleusercontent.com"
+  GOOGLE_CLIENT_ID: "500512939194-2mk76nh37laueik14bekk19ku24njsmf-apps.googleusercontent.com"
 };
