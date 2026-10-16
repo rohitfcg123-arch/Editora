@@ -1,144 +1,65 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#111827">
-  <meta name="description" content="Editora — edit, annotate, sign and organize PDF documents on your device.">
-  <title>Editora — PDF Editor</title>
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="icon" href="./assets/editora-icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./assets/css/styles.css?v=14">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js" defer></script>
-  <script src="./assets/js/editor.js?v=17" defer></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>MailBlaster — Gmail Campaign Sender</title>
+<meta name="description" content="Send personalised, permission-based emails from your own Gmail account using a CSV contact list.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./styles.css">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="./config.js"></script>
+<script src="./app.js" defer></script>
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="./" aria-label="Editora home">
-      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M9 4h15l8 8v24H9z" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"/><path d="M24 4v9h8M14 21h12M14 27h9" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="m23 30 8-8 3 3-8 8-4 1z" fill="currentColor"/></svg></span>
-      <span class="brand-name">Editora<span class="brand-dot">.</span><small>PDF WORKSPACE</small></span>
-    </a>
-    <div class="top-actions">
-      <span class="privacy-pill"><span class="privacy-dot"></span> Files stay on your device</span>
-      <button id="installButton" class="button button-quiet hidden" type="button">Install app</button>
-      <button id="openButton" class="button button-primary" type="button"><span aria-hidden="true">＋</span> Open PDF</button>
-      <input id="fileInput" type="file" accept="application/pdf,.pdf" hidden>
-      <input id="mergeInput" type="file" accept="application/pdf,.pdf" multiple hidden>
-      <input id="imageInput" type="file" accept="image/png,image/jpeg" hidden>
+<header class="topbar">
+  <a class="brand" href="./"><span class="brand-mark">M</span><span>Mail<span class="brand-light">Blaster</span></span></a>
+  <div class="topbar-right"><span class="privacy-pill"><span class="dot"></span> Browser-first privacy</span><button id="connectBtn" class="btn btn-google"><span class="google-g">G</span> Connect Gmail</button></div>
+</header>
+<main class="shell">
+  <section class="hero">
+    <div class="eyebrow"><span class="eyebrow-line"></span> SIMPLE EMAIL CAMPAIGNS</div>
+    <h1>Your message.<br><span>Your Gmail.</span></h1>
+    <p class="hero-copy">Personalised emails from a CSV, sent through the Gmail account you connect. No contact database to maintain.</p>
+    <div class="hero-notes"><span>✓ Send individually</span><span>✓ Personalise with {{name}}</span><span>✓ No file upload to our server</span></div>
+  </section>
+  <div class="notice"><strong>Use responsibly.</strong> Send only to people who agreed to receive your messages. Do not use purchased/scraped lists or unsolicited bulk mail. Gmail limits and Google verification requirements apply.</div>
+  <section class="workspace">
+    <div class="main-column">
+      <section class="card">
+        <div class="card-heading"><div class="step">01</div><div><h2>Choose your recipients</h2><p>Upload a CSV with an <code>Email</code> column and optional <code>Name</code> column.</p></div></div>
+        <label class="dropzone" id="dropzone" for="csvFile">
+          <input id="csvFile" type="file" accept=".csv,text/csv">
+          <span class="upload-icon">↑</span><strong>Drop your CSV here</strong><span>or <u>browse files</u></span><small>CSV only · Processed in this browser</small>
+        </label>
+        <div class="file-row hidden" id="fileRow"><span class="file-icon">CSV</span><div class="file-meta"><strong id="fileName">contacts.csv</strong><span id="fileMeta">0 valid recipients</span></div><button id="removeCsv" class="icon-btn" aria-label="Remove CSV">×</button></div>
+        <div id="previewWrap" class="preview-wrap hidden"><div class="preview-title"><span>RECIPIENT PREVIEW</span><span id="recipientCount">0 contacts</span></div><div class="table-scroll"><table><thead><tr><th>Name</th><th>Email</th></tr></thead><tbody id="previewBody"></tbody></table></div></div>
+      </section>
+      <section class="card">
+        <div class="card-heading"><div class="step">02</div><div><h2>Write your email</h2><p>Each recipient gets a separate message. Use placeholders to personalise it.</p></div></div>
+        <label class="field-label" for="subject">Email subject</label><input id="subject" class="text-input" maxlength="180" placeholder="A quick update for you">
+        <label class="field-label" for="message">Message</label><textarea id="message" class="message-input" rows="9" placeholder="Hi {{name}},&#10;&#10;I wanted to share an update with you.&#10;&#10;Best,&#10;Your name"></textarea>
+        <div class="placeholder-row"><span>Personalise:</span><button class="token" data-token="{{name}}">{{name}}</button><button class="token" data-token="{{email}}">{{email}}</button><span class="hint">Click to insert at cursor</span></div>
+      </section>
+      <section class="card send-card">
+        <div class="card-heading"><div class="step">03</div><div><h2>Review & send</h2><p>Review the campaign before sending. Maximum 50 recipients per run.</p></div></div>
+        <label class="consent-check"><input type="checkbox" id="consent"><span>I confirm these recipients have agreed to receive this email, and I will honour opt-out requests.</span></label>
+        <button id="sendBtn" class="btn btn-primary btn-wide" disabled><span>Send campaign</span><span class="arrow">↗</span></button>
+        <p class="send-footnote">Emails are sent one-by-one through your connected Gmail account. Keep this tab open while sending.</p>
+        <div id="progressWrap" class="progress-wrap hidden"><div class="progress-top"><strong id="progressLabel">Preparing campaign…</strong><span id="progressCount">0 / 0</span></div><div class="progress-track"><div id="progressBar" class="progress-bar"></div></div><div id="progressStatus" class="progress-status"></div></div>
+      </section>
     </div>
-  </header>
-
-  <main class="app-shell">
-    <aside class="left-rail" aria-label="Editing tools">
-      <div class="rail-title">TOOLS</div>
-      <button class="tool-button active" data-tool="select" title="Select / navigate"><span class="tool-icon">↖</span><span>Select</span></button>
-      <button class="tool-button" data-tool="text" title="Add text"><span class="tool-icon">T</span><span>Text</span></button>
-      <button class="tool-button" data-tool="edittext" title="Select an area and replace its text"><span class="tool-icon">T✎</span><span>Edit text</span></button>
-      <button class="tool-button" data-tool="erase" title="Visually erase an area"><span class="tool-icon">▱</span><span>Eraser</span></button>
-      <button class="tool-button" data-tool="replace" title="Cover an area and place replacement text"><span class="tool-icon">T↔</span><span>Cover &amp; replace</span></button>
-      <button class="tool-button" data-tool="highlight" title="Drag to highlight"><span class="tool-icon">▰</span><span>Highlight</span></button>
-      <button class="tool-button" data-tool="draw" title="Draw on the page"><span class="tool-icon">✎</span><span>Draw</span></button>
-      <button class="tool-button" data-tool="image" title="Insert an image"><span class="tool-icon">▧</span><span>Image</span></button>
-      <button class="tool-button" data-tool="signature" title="Draw a signature on the page"><span class="tool-icon">〰</span><span>Signature</span></button>
-      <div class="rail-divider"></div>
-      <button id="rotateButton" class="tool-button" title="Rotate this page clockwise"><span class="tool-icon">↻</span><span>Rotate page</span></button>
-      <button id="deletePageButton" class="tool-button danger-tool" title="Remove this page"><span class="tool-icon">▤−</span><span>Delete page</span></button>
-      <button id="extractButton" class="tool-button" title="Download this page as a separate PDF"><span class="tool-icon">⇩</span><span>Extract page</span></button>
-      <button id="mergeButton" class="tool-button" title="Merge PDFs together"><span class="tool-icon">⊞</span><span>Merge PDFs</span></button>
-      <div class="rail-spacer"></div>
-      <div class="rail-note"><span class="note-icon">🔒</span><span>Local-first<br>editing</span></div>
+    <aside class="side-column">
+      <section class="card account-card"><div class="side-title">SENDING ACCOUNT</div><div class="account-status"><span class="account-avatar">G</span><div><strong id="accountTitle">Gmail not connected</strong><span id="accountSubtitle">Connect to authorise sending</span></div></div><button id="sideConnectBtn" class="btn btn-outline btn-wide">Connect Gmail</button><p class="side-help">MailBlaster never asks for your Gmail password. Google handles sign-in and permission.</p></section>
+      <section class="card checklist-card"><div class="side-title">BEFORE YOU SEND</div><div class="check-row"><span class="check-icon">✓</span><div><strong>Clean contact list</strong><p>Remove duplicates and invalid addresses.</p></div></div><div class="check-row"><span class="check-icon">✓</span><div><strong>Personal message</strong><p>Use a clear subject and identify yourself.</p></div></div><div class="check-row"><span class="check-icon">✓</span><div><strong>Permission first</strong><p>Send only expected, wanted email.</p></div></div><div class="check-row"><span class="check-icon">✓</span><div><strong>Respect Gmail limits</strong><p>Google may restrict sending or require verification.</p></div></div></section>
+      <section class="card stats-card"><div class="side-title">THIS CAMPAIGN</div><div class="stat"><span>Valid recipients</span><strong id="statRecipients">0</strong></div><div class="stat"><span>Sent successfully</span><strong id="statSent">0</strong></div><div class="stat"><span>Failed</span><strong id="statFailed">0</strong></div><div class="stat"><span>Duplicates removed</span><strong id="statDuplicates">0</strong></div></section>
     </aside>
-
-    <section class="workspace">
-      <div class="document-bar">
-        <div class="document-name-wrap">
-          <span class="pdf-badge">PDF</span>
-          <div class="document-title-group">
-            <strong id="documentName">No document open</strong>
-            <span id="documentMeta">Open a PDF to start editing</span>
-          </div>
-        </div>
-        <div class="document-actions">
-          <button id="undoButton" class="icon-button" title="Undo last edit" disabled>↶</button>
-          <button id="redoButton" class="icon-button" title="Redo last edit" disabled>↷</button>
-          <span class="action-divider"></span>
-          <button id="zoomOutButton" class="icon-button" title="Zoom out" disabled>−</button>
-          <span id="zoomLabel" class="zoom-label">100%</span>
-          <button id="zoomInButton" class="icon-button" title="Zoom in" disabled>＋</button>
-          <button id="downloadButton" class="button button-primary" type="button" disabled>Download PDF <span aria-hidden="true">↓</span></button>
-          <button id="closePdfButton" class="button button-quiet" type="button" disabled title="Close current PDF">Remove PDF</button>
-        </div>
-      </div>
-
-      <div class="editor-area" id="dropZone">
-        <div id="welcome" class="welcome-card">
-          <div class="welcome-art">
-            <div class="art-sheet sheet-back"></div><div class="art-sheet sheet-front"><span>PDF</span><i></i><i></i><i></i><b>✎</b></div>
-            <span class="art-spark spark-one">✦</span><span class="art-spark spark-two">✧</span>
-          </div>
-          <p class="eyebrow">YOUR DOCUMENT WORKSPACE</p>
-          <h1>Make every PDF <span>work for you.</span></h1>
-          <p class="welcome-copy">Add text, highlight important lines, draw, sign and organize pages — all from one simple workspace.</p>
-          <button id="welcomeOpenButton" class="button button-primary button-large" type="button">Open a PDF <span aria-hidden="true">→</span></button>
-          <p class="drop-hint">or drag a PDF file here</p>
-          <div class="welcome-benefits"><span>✓ No account needed</span><span>✓ Local-first workflow</span><span>✓ Export when ready</span></div>
-        </div>
-
-        <div id="editorView" class="editor-view hidden">
-          <div class="page-stage-header">
-            <span id="toolHint">Select a tool to get started</span>
-            <div class="page-nav">
-              <button id="prevPageButton" class="small-icon-button" title="Previous page" disabled>‹</button>
-              <label><input id="pageNumber" type="number" min="1" value="1" aria-label="Current page"><span>/</span><b id="pageCount">0</b></label>
-              <button id="nextPageButton" class="small-icon-button" title="Next page" disabled>›</button>
-            </div>
-          </div>
-          <div id="pageViewport" class="page-viewport">
-            <div id="pageStack" class="page-stack">
-              <canvas id="pdfCanvas" aria-label="PDF page"></canvas>
-              <canvas id="annotationCanvas" aria-label="PDF annotations"></canvas>
-            </div>
-          </div>
-          <div class="stage-footer"><span id="pageState">Ready</span><span>Changes are applied when you download</span></div>
-        </div>
-      </div>
-      <div class="statusbar"><span class="status-light"></span><span id="statusText">Ready · Open a PDF to begin</span><span class="status-right">Editora <b>1.0 preview</b></span></div>
-    </section>
-
-    <aside class="right-panel">
-      <div class="panel-section">
-        <div class="panel-heading"><h2>Document</h2><span class="panel-heading-icon">▤</span></div>
-        <div class="file-summary">
-          <div class="file-summary-icon">PDF</div>
-          <div class="file-summary-info"><strong id="sideFileName">No file loaded</strong><span id="sideFileSize">—</span></div>
-        </div>
-        <div class="detail-row"><span>Pages</span><strong id="sidePageCount">—</strong></div>
-        <div class="detail-row"><span>Current page</span><strong id="sideCurrentPage">—</strong></div>
-        <div class="detail-row"><span>Pending edits</span><strong id="editCount">0</strong></div>
-      </div>
-      <div class="panel-section">
-        <div class="panel-heading"><h2>Quick actions</h2><span class="panel-heading-icon">✦</span></div>
-        <button id="sideOpenButton" class="quick-action"><span class="quick-action-icon purple">＋</span><span><b>Open another PDF</b><small>Load a document</small></span><span class="action-arrow">›</span></button>
-        <button id="sideMergeButton" class="quick-action"><span class="quick-action-icon blue">⊞</span><span><b>Merge PDFs</b><small>Combine documents</small></span><span class="action-arrow">›</span></button>
-        <button id="sideSaveButton" class="quick-action"><span class="quick-action-icon green">↓</span><span><b>Export edited PDF</b><small>Save a new copy</small></span><span class="action-arrow">›</span></button>
-      </div>
-      <div class="panel-section tip-panel">
-        <div class="tip-icon">✦</div><div><strong>Helpful tip</strong><p>Use <b>Cover &amp; replace</b> to visually cover a line and add replacement text. This changes the exported appearance; it does not rewrite the original PDF text objects.</p></div>
-      </div>
-      <div class="panel-section about-panel">
-        <div class="panel-heading"><h2>About this preview</h2></div>
-        <p>PDFs are processed in your browser whenever possible. This preview does not upload your document to Editora servers.</p>
-      </div>
-    </aside>
-  </main>
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <div id="busyLayer" class="busy-layer hidden"><div class="busy-card"><span class="spinner"></span><strong id="busyTitle">Working on your PDF…</strong><span id="busyDetail">Please keep this tab open.</span></div></div>
-  <footer class="mobile-footer"><span>🔒 Local-first editing</span><button id="mobileOpenButton" type="button">Open PDF</button></footer>
-  <script>
-    if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-      window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js").catch(() => {}));
-    }
-  </script>
+  </section>
+  <footer><span>MailBlaster · An independent tool, not affiliated with Google.</span><span>CSV stays in your browser · Access token is kept in memory only</span></footer>
+</main>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

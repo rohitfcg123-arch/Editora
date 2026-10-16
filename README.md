@@ -1,58 +1,47 @@
-# Editora — PDF Editor
+# MailBlaster
 
-**Tagline:** Edit. Perfect. Export.
+A browser-first Gmail campaign sender. Users connect their own Gmail account, upload a CSV, personalise a message, and send one email per recipient using the Gmail API.
 
-Editora is a local-first, browser-based PDF editor. The Android app is a thin WebView wrapper around the same hosted website so the interface and web features stay in sync.
+## Current MVP
 
-## Current preview features
+- CSV import with `Email` and optional `Name` columns
+- Duplicate removal and address validation
+- `{{name}}` and `{{email}}` personalisation
+- Gmail OAuth using the `gmail.send` scope
+- Individual messages sent through Gmail API
+- Progress and per-recipient failure counts
+- CSV processing and OAuth access token stay in the browser session
+- Campaign cap of 50 recipients per run and paced sending
+- Permission confirmation before sending
 
-- Open and preview PDF files in the browser.
-- Add text overlays.
-- Visually cover a page region and place replacement text.
-- Highlight, draw and add signature strokes.
-- Add PNG/JPEG images.
-- Rotate and mark pages for deletion.
-- Extract the current page and merge multiple PDFs.
-- Export a new edited PDF copy.
-- Responsive website UI and PWA manifest/service worker.
+## Setup required before Gmail sending works
 
-### PDF text editing limitation
+1. In Google Cloud Console, create/select a project and enable **Gmail API**.
+2. Configure the OAuth consent screen. Since this is intended for public users, check Google's current verification and scope requirements for `https://www.googleapis.com/auth/gmail.send`. Until verification is complete, access may be limited to test users.
+3. Create an OAuth Client ID of type **Web application**.
+4. Add the deployed site's exact origin under **Authorized JavaScript origins**. For GitHub Pages, this will be `https://rohitfcg123-arch.github.io`.
+5. Copy the Web Client ID into `config.js` as `GOOGLE_CLIENT_ID`.
+6. Push to `main` and wait for the GitHub Pages workflow to finish.
 
-The first version adds edit layers to the PDF. **Cover & replace** visually covers a selected region and places new text on top; it does not remove or rewrite the original text objects or redact their underlying content. Do not rely on this tool for secure redaction of sensitive information. Scanned PDFs and protected PDFs may need additional OCR/password handling.
+No client secret belongs in this repository or in browser code. The app uses Google Identity Services' browser token flow. Access tokens are kept in memory and are not written to localStorage.
 
-## Publish the website with GitHub Pages
+## CSV format
 
-1. Open **Settings → Pages** in this repository.
-2. Under **Build and deployment**, choose **Deploy from a branch**.
-3. Select branch **main** and folder **root**, then Save.
-4. Wait for the Pages deployment to finish.
+```csv
+Name,Email
+Rahul,rahul@example.com
+Priya,priya@example.com
+```
 
-Expected site URL: https://rohitfcg123-arch.github.io/Editora/
+## Important limits and responsible use
 
-The app uses PDF.js and pdf-lib from public CDNs, so an internet connection is currently required to load these PDF libraries. PDFs opened by the editor are processed in the browser; this version does not upload them to an Editora server.
+- Only send to recipients who have explicitly agreed to receive the messages. Do not use purchased, scraped, or unsolicited mailing lists.
+- This is not an unlimited email service. Google account sending limits, API quotas, OAuth verification, anti-abuse controls, spam complaints, and deliverability all apply.
+- Gmail API acceptance does not guarantee inbox delivery.
+- The app does not track opens or clicks.
+- The current MVP does not provide server-side campaign persistence, scheduled/background sending, unsubscribe-link generation, or a server-side suppression list. Add these before using it as a commercial email marketing service.
+- A browser tab must remain open while sending.
 
-## Build the Android WebView app
+## Hosting
 
-Open the android-app folder in Android Studio. The app loads the same GitHub Pages URL configured in MainActivity.kt. **Enable GitHub Pages first** so the URL is available. Then build a debug APK via **Build → Build APK(s)**.
-
-Because the app loads the hosted website, code/interface updates can appear in the app without building a new APK, provided the WebView/browser cache is refreshed. Changes to native Android code do require rebuilding the APK.
-
-## Firebase rules
-
-firestore.rules, storage.rules, and firebase.json are included as secure deny-by-default templates. No Firebase project has been linked or rules deployed from this repository. The current PDF editing features do not need Firebase. If cloud accounts or cloud documents are added later, implement authentication and user-owned document paths before relaxing these rules.
-
-To deploy the current rules from a local machine with Firebase CLI configured for the intended project:
-
-    firebase use <your-project-id>
-    firebase deploy --only firestore:rules,storage
-
-Do not add private API keys or service-account credentials to this public repository.
-
-## Download a debug APK from GitHub Actions
-
-1. Open the repository's **Actions** tab.
-2. Open the latest **Build Editora Android APK** run and wait for the green check.
-3. In **Artifacts**, download `editora-android-debug-apk`.
-4. Extract the ZIP and install `app-debug.apk` on your Android phone. Android may ask you to allow installs from the browser/file manager.
-
-The APK is a WebView shell, not an offline native PDF engine. It needs the GitHub Pages site and internet access to load the shared editor.
+GitHub Actions deploys the static site to GitHub Pages. No server or file storage is required for the current client-side MVP.
