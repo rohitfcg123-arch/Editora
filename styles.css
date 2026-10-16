@@ -19,3 +19,10 @@
 .profile-actions{display:flex;gap:9px}
 .profile-actions .btn{flex:1;padding:10px 8px;font-size:11px}
 @media(max-width:520px){.topbar{padding:0 12px}.topbar-right{gap:7px}.privacy-pill{display:none}.btn-profile{padding:9px 10px}.btn-google{padding:9px 10px;font-size:11px}.profile-panel{right:12px;top:66px}}
+
+/* Profile panel visibility and stacking fix */
+.profile-panel{display:block}
+.profile-panel.hidden{display:none!important}
+.topbar{position:relative;z-index:21}
+.profile-panel{position:absolute;top:76px;right:max(24px,calc((100vw - 1180px)/2))}
+@media(max-width:520px){.profile-panel{top:76px;right:12px}}
