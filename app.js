@@ -1,6 +1,6 @@
 (() => {
   const $ = id => document.getElementById(id);
-  const state = { token: null, recipients: [], sent: 0, failed: 0, duplicates: 0, skipped: 0, sending: false, tokenClient: null };
+  const state = { token: null, recipients: [], sent: 0, failed: 0, duplicates: 0, skipped: 0, sending: false, tokenClient: null, user: null, connectedAt: null };
   const MAX_RECIPIENTS = 50;
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   function toast(message) { const el=$('toast'); el.textContent=message; el.classList.add('show'); clearTimeout(toast.timer); toast.timer=setTimeout(()=>el.classList.remove('show'),3500); }
@@ -9,7 +9,38 @@
     $('accountSubtitle').textContent = connected ? 'Ready to send from your account' : 'Connect to authorise sending';
     $('connectBtn').innerHTML = connected ? '<span class="google-g">G</span> Gmail connected' : '<span class="google-g">G</span> Connect Gmail';
     $('sideConnectBtn').textContent = connected ? 'Reconnect Gmail' : 'Connect Gmail';
+    $('profileConnectBtn').textContent = connected ? 'Reconnect Gmail' : 'Connect Gmail';
+    $('disconnectBtn').disabled = !connected;
+    renderProfile();
     updateSendButton();
+  }
+  function renderProfile() {
+    const connected = Boolean(state.token);
+    $('profileName').textContent = state.user?.name || (connected ? 'Google account connected' : 'Not connected');
+    $('profileEmail').textContent = state.user?.email || (connected ? 'Account email unavailable' : 'Connect Gmail to view account details');
+    $('profileAvatar').textContent = (state.user?.name || state.user?.email || '?').trim().charAt(0).toUpperCase();
+    $('profileConnection').textContent = connected ? 'Connected' : 'Not connected';
+    $('profilePermission').textContent = connected ? 'Granted for this session' : 'Not granted / disconnected';
+    $('profileIdentityPermission').textContent = state.user ? 'Granted (email/profile)' : 'Not available';
+    $('profileSession').textContent = connected && state.connectedAt ? 'Active since ' + state.connectedAt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : 'No active session';
+  }
+  async function loadGoogleProfile(token) {
+    try {
+      const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {headers:{Authorization:'Bearer '+token}});
+      if(!response.ok) throw new Error('Profile lookup failed');
+      const profile = await response.json();
+      state.user = {name:profile.name || '', email:profile.email || '', picture:profile.picture || ''};
+    } catch (err) {
+      state.user = null;
+    }
+    renderProfile();
+  }
+  function disconnectGmail() {
+    if(state.sending){toast('Wait until the current campaign stops before disconnecting.');return;}
+    if(state.token && window.google?.accounts?.oauth2?.revoke){
+      google.accounts.oauth2.revoke(state.token, () => {});
+    }
+    state.token=null;state.user=null;state.connectedAt=null;setConnected(false);toast('Gmail disconnected from this session.');
   }
   function updateSendButton() {
     $('sendBtn').disabled = state.sending || !state.token || state.recipients.length===0 || !$('subject').value.trim() || !$('message').value.trim() || !$('consent').checked;
@@ -81,10 +112,10 @@
     if(!window.google?.accounts?.oauth2){toast('Google sign-in is still loading. Please try again.');return;}
     state.tokenClient=google.accounts.oauth2.initTokenClient({
       client_id:MAILBLASTER_CONFIG.GOOGLE_CLIENT_ID,
-      scope:'https://www.googleapis.com/auth/gmail.send',
+      scope:'openid email profile https://www.googleapis.com/auth/gmail.send',
       callback: response=>{
         if(response.error){toast('Google authorisation failed: '+response.error);return;}
-        state.token=response.access_token;setConnected(true);toast('Gmail connected for this session.');
+        state.token=response.access_token;state.connectedAt=new Date();state.user=null;setConnected(true);loadGoogleProfile(state.token);toast('Gmail connected for this session.');
       },
       error_callback:err=>toast('Google sign-in error: '+(err.message||err.type||'please try again'))
     });
@@ -108,7 +139,7 @@
       method:'POST',headers:{Authorization:'Bearer '+state.token,'Content-Type':'application/json'},
       body:JSON.stringify({raw:makeRaw(recipient,personalize(subject,recipient),personalize(body,recipient))})
     });
-    if(response.status===401){state.token=null;setConnected(false);throw new Error('Gmail session expired. Reconnect Gmail to continue.');}
+    if(response.status===401){state.token=null;state.user=null;state.connectedAt=null;setConnected(false);throw new Error('Gmail session expired. Reconnect Gmail to continue.');}
     if(!response.ok){let detail='Gmail API error ('+response.status+')';try{const data=await response.json();detail=data.error?.message||detail;}catch{}throw new Error(detail);}
     return response.json();
   }
@@ -135,7 +166,10 @@
     $('progressStatus').textContent='Accepted by Gmail: '+state.sent+' · Failed: '+state.failed+'. Gmail acceptance does not guarantee inbox delivery.';
     toast('Campaign finished. Sent: '+state.sent+' · Failed: '+state.failed);
   }
-  $('connectBtn').addEventListener('click',connectGmail);$('sideConnectBtn').addEventListener('click',connectGmail);
+  $('connectBtn').addEventListener('click',connectGmail);$('sideConnectBtn').addEventListener('click',connectGmail);$('profileConnectBtn').addEventListener('click',connectGmail);
+  $('profileBtn').addEventListener('click',()=>{const panel=$('profilePanel'),open=panel.classList.toggle('hidden')===false;$('profileBtn').setAttribute('aria-expanded',String(open));if(open)renderProfile();});
+  $('closeProfileBtn').addEventListener('click',()=>{$('profilePanel').classList.add('hidden');$('profileBtn').setAttribute('aria-expanded','false');});
+  $('disconnectBtn').addEventListener('click',disconnectGmail);
   $('csvFile').addEventListener('change',e=>readCsv(e.target.files[0]));
   $('removeCsv').addEventListener('click',()=>{state.recipients=[];state.duplicates=0;renderRecipients();$('fileName').textContent='';});
   ['subject','message','consent'].forEach(id=>$(id).addEventListener('input',updateSendButton));
