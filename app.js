@@ -1,6 +1,6 @@
 (() => {
   const $ = id => document.getElementById(id);
-  const state = { token: null, recipients: [], sent: 0, failed: 0, duplicates: 0, sending: false, tokenClient: null };
+  const state = { token: null, recipients: [], sent: 0, failed: 0, duplicates: 0, skipped: 0, sending: false, tokenClient: null };
   const MAX_RECIPIENTS = 50;
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   function toast(message) { const el=$('toast'); el.textContent=message; el.classList.add('show'); clearTimeout(toast.timer); toast.timer=setTimeout(()=>el.classList.remove('show'),3500); }
@@ -29,9 +29,15 @@
     const headers=rows.shift().map(v=>v.trim().toLowerCase().replace(/^\uFEFF/,''));
     const emailIndex=headers.findIndex(v=>['email','e-mail','email address','emailaddress'].includes(v));
     const nameIndex=headers.findIndex(v=>['name','full name','fullname','first name','firstname'].includes(v));
+    const sendingIndex=headers.findIndex(v=>v==='sending');
     if(emailIndex<0) throw new Error('CSV needs a column named Email.');
-    const seen=new Set(); state.duplicates=0; const list=[];
+    const seen=new Set(); state.duplicates=0; state.skipped=0; const list=[];
     for(const cells of rows){
+      // If a Sending column exists, only rows explicitly marked Yes are eligible.
+      // Accepted Yes values: yes, y, true, 1 (case-insensitive). No/blank/other values are skipped.
+      if(sendingIndex>=0 && !['yes','y','true','1'].includes((cells[sendingIndex]||'').trim().toLowerCase())){
+        state.skipped++; continue;
+      }
       const email=(cells[emailIndex]||'').trim().toLowerCase();
       const name=nameIndex>=0?(cells[nameIndex]||'').trim():'';
       if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
@@ -53,7 +59,7 @@
     wrap.classList.remove('hidden');fileRow.classList.remove('hidden');
     $('previewBody').innerHTML=state.recipients.slice(0,8).map(r=>'<tr><td>'+escapeHtml(r.name||'—')+'</td><td>'+escapeHtml(r.email)+'</td></tr>').join('');
     if(state.recipients.length>8)$('previewBody').insertAdjacentHTML('beforeend','<tr><td colspan="2">+ '+(state.recipients.length-8)+' more recipients</td></tr>');
-    $('fileMeta').textContent=state.recipients.length+' valid recipients · '+state.duplicates+' duplicates removed';
+    $('fileMeta').textContent=state.recipients.length+' eligible recipients · '+state.duplicates+' duplicates removed'+(state.skipped?' · '+state.skipped+' rows skipped by Sending':'');
     updateStats();updateSendButton();
   }
   function escapeHtml(value){return String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
