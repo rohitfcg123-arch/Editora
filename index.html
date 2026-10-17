@@ -9,10 +9,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./styles.css?v=session-refresh-fix-3">
+<link rel="stylesheet" href="./styles.css?v=personal-email-preview-4">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="./config.js"></script>
-<script src="./app.js?v=session-refresh-fix-3" defer></script>
+<script src="./app.js?v=personal-email-preview-4" defer></script>
 </head>
 <body>
 <header class="topbar">
@@ -42,13 +43,13 @@
   <section class="workspace">
     <div class="main-column">
       <section class="card">
-        <div class="card-heading"><div class="step">01</div><div><h2>Choose your recipients</h2><p>Upload a CSV with an <code>Email</code> column and optional <code>Name</code> column.</p></div></div>
+        <div class="card-heading"><div class="step">01</div><div><h2>Choose your recipients</h2><p>Upload CSV or Excel (.xlsx/.xls). Required: <code>Email</code>. Optional: <code>Name</code>, <code>Exam</code>, <code>Subject</code>, <code>Body</code>, <code>Sending</code>.</p></div></div>
         <label class="dropzone" id="dropzone" for="csvFile">
-          <input id="csvFile" type="file" accept=".csv,text/csv">
-          <span class="upload-icon">↑</span><strong>Drop your CSV here</strong><span>or <u>browse files</u></span><small>CSV only · Processed in this browser</small>
+          <input id="csvFile" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
+          <span class="upload-icon">↑</span><strong>Drop your CSV here</strong><span>or <u>browse files</u></span><small>CSV / Excel · Processed in this browser</small>
         </label>
         <div class="file-row hidden" id="fileRow"><span class="file-icon">CSV</span><div class="file-meta"><strong id="fileName">contacts.csv</strong><span id="fileMeta">0 valid recipients</span></div><button id="removeCsv" class="icon-btn" aria-label="Remove CSV">×</button></div>
-        <div id="previewWrap" class="preview-wrap hidden"><div class="preview-title"><span>RECIPIENT PREVIEW</span><span id="recipientCount">0 contacts</span></div><div class="table-scroll"><table><thead><tr><th>Name</th><th>Email</th></tr></thead><tbody id="previewBody"></tbody></table></div></div>
+        <div id="previewWrap" class="preview-wrap hidden"><div class="preview-title"><span>RECIPIENT PREVIEW</span><span id="recipientCount">0 contacts</span></div><div class="table-scroll"><table><thead><tr><th>Name</th><th>Email</th><th>Exam</th><th>Email preview</th></tr></thead><tbody id="previewBody"></tbody></table></div></div>
       </section>
       <section class="card">
         <div class="card-heading"><div class="step">02</div><div><h2>Write your email</h2><p>Each recipient gets a separate message. Use placeholders to personalise it.</p></div></div>
@@ -57,7 +58,7 @@
         <div class="placeholder-row"><span>Personalise:</span><button class="token" data-token="{{name}}">{{name}}</button><button class="token" data-token="{{email}}">{{email}}</button><span class="hint">Click to insert at cursor</span></div>
       </section>
       <section class="card send-card">
-        <div class="card-heading"><div class="step">03</div><div><h2>Review & send</h2><p>Review the campaign before sending. Maximum 50 recipients per run.</p></div></div>
+        <div class="card-heading"><div class="step">03</div><div><h2>Review & send</h2><p>Review each personalised email before sending. Maximum 50 recipients per run.</p></div></div>
         <label class="consent-check"><input type="checkbox" id="consent"><span>I confirm these recipients have agreed to receive this email, and I will honour opt-out requests.</span></label>
         <button id="sendBtn" class="btn btn-primary btn-wide" disabled><span>Send campaign</span><span class="arrow">↗</span></button>
         <p class="send-footnote">Emails are sent one-by-one through your connected Gmail account. Keep this tab open while sending.</p>
@@ -72,6 +73,9 @@
   </section>
   <footer class="site-footer"><span>MailBlaster · An independent tool, not affiliated with Google.</span><span>CSV stays in your browser · Session token is stored in this tab only</span><nav class="legal-links" aria-label="Legal"><a href="./privacy.html">Privacy Policy</a><a href="./terms.html">Terms of Service</a></nav></footer>
 </main>
+<div id="emailPreviewModal" class="email-preview-modal hidden" role="dialog" aria-modal="true" aria-labelledby="emailPreviewTitle">
+  <div class="email-preview-card"><div class="email-preview-head"><div><div class="side-title">PERSONAL EMAIL PREVIEW</div><h2 id="emailPreviewTitle">Email subject</h2><p id="emailPreviewTo"></p></div><button id="closeEmailPreview" class="icon-btn" aria-label="Close preview">×</button></div><pre id="emailPreviewBody" class="email-preview-body"></pre><button type="button" id="closeEmailPreviewBottom" class="btn btn-outline btn-wide">Close preview</button></div>
+</div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>
 </html>
