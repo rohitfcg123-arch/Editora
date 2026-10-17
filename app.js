@@ -61,7 +61,9 @@
     state.token=null;state.tokenExpiresAt=0;state.user=null;state.connectedAt=null;try{sessionStorage.removeItem(SESSION_KEY);}catch{}setConnected(false);toast('Gmail disconnected from this session.');
   }
   function updateSendButton() {
-    $('sendBtn').disabled = state.sending || !state.token || state.recipients.length===0 || !$('subject').value.trim() || !$('message').value.trim() || !$('consent').checked;
+    const defaultSubject=$('subject').value.trim(), defaultBody=$('message').value.trim();
+    const everyRecipientHasContent=state.recipients.length>0 && state.recipients.every(r=>(r.subject||defaultSubject).trim() && (r.body||defaultBody).trim());
+    $('sendBtn').disabled = state.sending || !state.token || state.recipients.length===0 || !everyRecipientHasContent || !$('consent').checked;
   }
   function parseCsv(text) {
     const rows=[]; let row=[], field='', quoted=false;
