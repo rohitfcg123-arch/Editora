@@ -76,9 +76,12 @@
     if(field.length||row.length){row.push(field);if(row.some(v=>v.trim()))rows.push(row);}
     if(!rows.length) return [];
     const headers=rows.shift().map(v=>v.trim().toLowerCase().replace(/^\uFEFF/,''));
-    const emailIndex=headers.findIndex(v=>['email','e-mail','email address','emailaddress'].includes(v));
-    const nameIndex=headers.findIndex(v=>['name','full name','fullname','first name','firstname'].includes(v));
+    const emailIndex=headers.findIndex(v=>['email','e-mail','email address','emailaddress','recipient','recipient email'].includes(v));
+    const nameIndex=headers.findIndex(v=>['name','full name','fullname','first name','firstname','recipient name'].includes(v));
     const sendingIndex=headers.findIndex(v=>v==='sending');
+    const subjectIndex=headers.findIndex(v=>['subject','email subject'].includes(v));
+    const bodyIndex=headers.findIndex(v=>['body','message','email body','email message','personalized body','personalised body'].includes(v));
+    const examIndex=headers.findIndex(v=>['exam','exam name','course','context','topic'].includes(v));
     if(emailIndex<0) throw new Error('CSV needs a column named Email.');
     const seen=new Set(); state.duplicates=0; state.skipped=0; const list=[];
     for(const cells of rows){
@@ -91,7 +94,7 @@
       const name=nameIndex>=0?(cells[nameIndex]||'').trim():'';
       if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
       if(seen.has(email)){state.duplicates++;continue;}
-      seen.add(email); list.push({email,name});
+      seen.add(email); list.push({email,name,subject:subjectIndex>=0?(cells[subjectIndex]||'').trim():'',body:bodyIndex>=0?(cells[bodyIndex]||'').trim():'',exam:examIndex>=0?(cells[examIndex]||'').trim():''});
     }
     return list;
   }
@@ -106,20 +109,28 @@
     const wrap=$('previewWrap'), fileRow=$('fileRow');
     if(!state.recipients.length){wrap.classList.add('hidden');fileRow.classList.add('hidden');updateStats();updateSendButton();return;}
     wrap.classList.remove('hidden');fileRow.classList.remove('hidden');
-    $('previewBody').innerHTML=state.recipients.slice(0,8).map(r=>'<tr><td>'+escapeHtml(r.name||'—')+'</td><td>'+escapeHtml(r.email)+'</td></tr>').join('');
-    if(state.recipients.length>8)$('previewBody').insertAdjacentHTML('beforeend','<tr><td colspan="2">+ '+(state.recipients.length-8)+' more recipients</td></tr>');
+    $('previewBody').innerHTML=state.recipients.slice(0,50).map((r,i)=>'<tr><td>'+escapeHtml(r.name||'—')+'</td><td>'+escapeHtml(r.email)+'</td><td>'+escapeHtml(r.exam||'—')+'</td><td><button type="button" class="token preview-email-btn" data-preview-index="'+i+'">Read email</button></td></tr>').join('');
     $('fileMeta').textContent=state.recipients.length+' eligible recipients · '+state.duplicates+' duplicates removed'+(state.skipped?' · '+state.skipped+' rows skipped by Sending':'');
     updateStats();updateSendButton();
   }
   function escapeHtml(value){return String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
   async function readCsv(file){
     if(!file)return;
-    if(!file.name.toLowerCase().endsWith('.csv')){toast('Please choose a CSV file.');return;}
+    const ext=file.name.toLowerCase().split('.').pop();
+    if(!['csv','xlsx','xls'].includes(ext)){toast('Please choose a CSV or Excel file (.xlsx/.xls).');return;}
     try{
-      const text=await file.text(); const list=parseCsv(text);
+      let text;
+      if(ext==='csv') text=await file.text();
+      else {
+        if(!window.XLSX) throw new Error('Excel reader is loading. Refresh and try again.');
+        const workbook=XLSX.read(await file.arrayBuffer(),{type:'array'});
+        const sheet=workbook.Sheets[workbook.SheetNames[0]];
+        text=XLSX.utils.sheet_to_csv(sheet);
+      }
+      const list=parseCsv(text);
       if(!list.length)throw new Error('No valid email addresses found. Check the Email column.');
-      if(list.length>MAX_RECIPIENTS)throw new Error('This MVP allows up to '+MAX_RECIPIENTS+' unique recipients per campaign. Your CSV has '+list.length+'.');
-      state.recipients=list;state.sent=0;state.failed=0;$('fileName').textContent=file.name;renderRecipients();toast('Loaded '+list.length+' valid recipients.');
+      if(list.length>MAX_RECIPIENTS)throw new Error('This MVP allows up to '+MAX_RECIPIENTS+' unique recipients per campaign. Your file has '+list.length+'.');
+      state.recipients=list;state.sent=0;state.failed=0;$('fileName').textContent=file.name;renderRecipients();toast('Loaded '+list.length+' valid recipients with per-person preview.');
     }catch(err){state.recipients=[];renderRecipients();toast(err.message||'Could not read this CSV.');}
     $('csvFile').value='';
   }
@@ -151,7 +162,16 @@
     const encodedBody=wrap76(b64(new TextEncoder().encode(body.replace(/\r?\n/g,'\r\n'))));
     return base64UrlUtf8('To: '+recipient.email+'\r\nSubject: '+encodedSubject+'\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n'+encodedBody);
   }
-  function personalize(text, recipient){return text.replace(/\{\{\s*name\s*\}\}/gi,recipient.name||'there').replace(/\{\{\s*email\s*\}\}/gi,recipient.email);}
+  function personalize(text, recipient){return String(text||'').replace(/\{\{\s*name\s*\}\}/gi,recipient.name||'there').replace(/\{\{\s*email\s*\}\}/gi,recipient.email).replace(/\{\{\s*exam\s*\}\}/gi,recipient.exam||'');}
+  function effectiveSubject(recipient){return personalize(recipient.subject||$('subject').value.trim(),recipient);}
+  function effectiveBody(recipient){return personalize(recipient.body||$('message').value.trim(),recipient);}
+  function showEmailPreview(index){
+    const r=state.recipients[index];if(!r)return;
+    $('emailPreviewTitle').textContent=effectiveSubject(r)||'(No subject)';
+    $('emailPreviewTo').textContent=(r.name?r.name+' · ':'')+r.email+(r.exam?' · '+r.exam:'');
+    $('emailPreviewBody').textContent=effectiveBody(r)||'(No body — add a Body column or default message.)';
+    $('emailPreviewModal').classList.remove('hidden');
+  }
   async function sendOne(recipient, subject, body){
     const response=await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send',{
       method:'POST',headers:{Authorization:'Bearer '+state.token,'Content-Type':'application/json'},
@@ -164,7 +184,7 @@
   async function sendCampaign(){
     if(state.sending||!state.token||!state.recipients.length)return;
     const subject=$('subject').value.trim(), body=$('message').value.trim();
-    if(!subject||!body){toast('Enter a subject and message first.');return;}
+    if(!state.recipients.every(r=>(r.subject||subject).trim() && (r.body||body).trim())){toast('Each recipient needs a Subject and Body in the file, or fill the default Subject and Message fields.');return;}
     if(!confirm('Send '+state.recipients.length+' separate emails from your connected Gmail account? Only proceed if these recipients opted in.'))return;
     state.sending=true;state.sent=0;state.failed=0;updateStats();updateSendButton();
     $('progressWrap').classList.remove('hidden');$('progressBar').style.width='0%';$('progressLabel').textContent='Sending campaign…';
@@ -172,7 +192,7 @@
       const recipient=state.recipients[i];
       $('progressCount').textContent=(i+1)+' / '+state.recipients.length;
       $('progressStatus').textContent='Sending to '+recipient.email;
-      try{await sendOne(recipient,subject,body);state.sent++;}
+      try{await sendOne(recipient,effectiveSubject(recipient),effectiveBody(recipient));state.sent++;}
       catch(err){state.failed++;$('progressStatus').textContent='Failed for '+recipient.email+': '+err.message;if(!state.token)break;}
       $('progressBar').style.width=Math.round(((i+1)/state.recipients.length)*100)+'%';updateStats();
       if(i<state.recipients.length-1 && state.token)await sleep(1800);
@@ -191,6 +211,10 @@
   $('closeProfileBtn').addEventListener('click',()=>{$('profilePanel').classList.add('hidden');$('profileBtn').setAttribute('aria-expanded','false');});
   $('disconnectBtn').addEventListener('click',disconnectGmail);
   $('csvFile').addEventListener('change',e=>readCsv(e.target.files[0]));
+  $('previewBody').addEventListener('click',e=>{const b=e.target.closest('[data-preview-index]');if(b)showEmailPreview(Number(b.dataset.previewIndex));});
+  $('closeEmailPreview').addEventListener('click',()=>$('emailPreviewModal').classList.add('hidden'));
+  $('closeEmailPreviewBottom').addEventListener('click',()=>$('emailPreviewModal').classList.add('hidden'));
+  $('emailPreviewModal').addEventListener('click',e=>{if(e.target===$('emailPreviewModal'))$('emailPreviewModal').classList.add('hidden');});
   $('removeCsv').addEventListener('click',()=>{state.recipients=[];state.duplicates=0;renderRecipients();$('fileName').textContent='';});
   ['subject','message','consent'].forEach(id=>$(id).addEventListener('input',updateSendButton));
   $('consent').addEventListener('change',updateSendButton);$('sendBtn').addEventListener('click',sendCampaign);
