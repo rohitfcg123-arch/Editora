@@ -48,6 +48,10 @@
           <input id="csvFile" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
           <span class="upload-icon">↑</span><strong>Drop your CSV here</strong><span>or <u>browse files</u></span><small>CSV / Excel · Processed in this browser</small>
         </label>
+        <div class="sample-download-row">
+          <button type="button" id="downloadSampleCsv" class="btn btn-outline">↓ Download sample CSV</button>
+          <small>Sample contacts are placeholders. Replace them with real recipients who agreed to receive your email before sending.</small>
+        </div>
         <div class="file-row hidden" id="fileRow"><span class="file-icon">CSV</span><div class="file-meta"><strong id="fileName">contacts.csv</strong><span id="fileMeta">0 valid recipients</span></div><button id="removeCsv" class="icon-btn" aria-label="Remove CSV">×</button></div>
         <div id="previewWrap" class="preview-wrap hidden"><div class="preview-title"><span>RECIPIENT PREVIEW</span><span id="recipientCount">0 contacts</span></div><div class="table-scroll"><table><thead><tr><th>Name</th><th>Email</th><th>Exam</th><th>Email preview</th></tr></thead><tbody id="previewBody"></tbody></table></div></div>
       </section>
