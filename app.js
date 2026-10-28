@@ -212,6 +212,21 @@
   $('profilePanel').addEventListener('click',event=>event.stopPropagation());
   $('closeProfileBtn').addEventListener('click',()=>{$('profilePanel').classList.add('hidden');$('profileBtn').setAttribute('aria-expanded','false');});
   $('disconnectBtn').addEventListener('click',disconnectGmail);
+  $('downloadSampleCsv').addEventListener('click',()=>{
+    const sample = [
+      ['Name','Email'],
+      ['Taylor Example','taylor@example.com'],
+      ['Jordan Example','jordan@example.com']
+    ];
+    const csv = '\\uFEFF' + sample.map(row=>row.map(value=>'"'+String(value).replace(/"/g,'""')+'"').join(',')).join('\\r\\n');
+    const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = 'mailblaster-sample.csv';
+    document.body.appendChild(link); link.click(); link.remove();
+    URL.revokeObjectURL(url);
+    toast('Sample CSV downloaded. Replace placeholder emails before use.');
+  });
   $('csvFile').addEventListener('change',e=>readCsv(e.target.files[0]));
   $('previewBody').addEventListener('click',e=>{const b=e.target.closest('[data-preview-index]');if(b)showEmailPreview(Number(b.dataset.previewIndex));});
   $('closeEmailPreview').addEventListener('click',()=>$('emailPreviewModal').classList.add('hidden'));
